@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-poppins: 'Poppins', sans-serif;
+  --color-mochi-blush: #fef0f2;
+  --color-mochi-rose: #d65b7d;
+  --color-mochi-deeprose: #a63957;
+  --color-mochi-dark: #221815;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Custom soft scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #fdf2f4;
+}
+::-webkit-scrollbar-thumb {
+  background: #f3cbd5;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #e59fb1;
+}
+
+/* Thermal POS Receipt Print Styles */
+@media screen {
+  #thermal-print-container {
+    display: none !important;
+    visibility: hidden !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0 !important;
+    padding: 0 !important;
+    size: auto;
+  }
+
+  /* Reset body and html for print rendering */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Completely suppress and hide the entire web application (#root, nav, dialogs, overlays, etc.) */
+  #root,
+  nav,
+  header,
+  footer,
+  aside,
+  dialog,
+  iframe,
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    max-height: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+    left: -99999px !important;
+    top: -99999px !important;
+    z-index: -99999 !important;
+  }
+
+  /* Display ONLY #thermal-print-container with crisp thermal layout */
+  #thermal-print-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: static !important;
+    margin: 0 auto !important;
+    padding: 3mm 2mm 6mm 2mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    line-height: 1.35 !important;
+  }
+
+  /* 58mm thermal paper size standard */
+  #thermal-print-container.paper-58mm {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    min-width: 58mm !important;
+  }
+
+  #thermal-print-container.paper-80mm {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    min-width: 80mm !important;
+  }
+
+  /* Ensure all receipt elements are visible and in pure solid black */
+  #thermal-print-container * {
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #000000 !important;
+    background: transparent !important;
+    box-sizing: border-box !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

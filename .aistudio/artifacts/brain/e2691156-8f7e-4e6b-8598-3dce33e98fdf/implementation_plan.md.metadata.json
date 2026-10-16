@@ -1,0 +1,6 @@
+{
+  "summary": "Rencana implementasi komprehensif penyempurnaan sistem toko Mochi Steps: perbaikan cetak struk POS thermal anti-blank putih, penataan 8 menu Admin Panel terpadu, modul Inventory & Stok (Manajemen Stok, Opname Stok, Riwayat Mutasi, Produk), modul Pengaturan Harga & Profit Markup Massal, sistem Lacak Pesanan mandiri tanpa login berbasis verifikasi Nomor Pesanan & Nomor HP, serta audit konsistensi Firestore.",
+  "updatedAt": "2026-10-15T10:26:01.851691886Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

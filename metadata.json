@@ -1,0 +1,6 @@
+{
+  "name": "Mochi Steps - Flatshoes Wanita Cantik & Nyaman",
+  "description": "Webstore flatshoes wanita modern Mochi Steps dengan bantalan selembut mochi, database Firestore real-time, mutasi stok, sistem approval pembayaran, dan admin portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
