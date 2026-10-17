@@ -35,6 +35,7 @@ import {
   Share2,
   CheckCircle2,
   Image as ImageIcon,
+  Sliders,
 } from 'lucide-react';
 import {
   Order,
@@ -47,10 +48,15 @@ import {
 import {
   approvePayment,
   rejectPayment,
+  cancelCustomerOrder,
   updateOrderStatus,
   updateOrderCustomStatus,
   updateOrderTracking,
   updateProductDetails,
+  updateProductSizeStock,
+  getProductSizeStock,
+  calculateTotalFromSizeStock,
+  DEFAULT_SIZES,
   addNewProduct,
   deleteProduct,
 } from '../../lib/firestoreService';
@@ -121,7 +127,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
   const [approvingOrderId, setApprovingOrderId] = useState<string | null>(null);
   const [approvalToast, setApprovalToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [zoomedProofImage, setZoomedProofImage] = useState<{ url: string; orderNumber: string; customerName: string; amount?: number; method?: string } | null>(null);
+  const [zoomedProofImage, setZoomedProofImage] = useState<{ url?: string; orderNumber: string; customerName: string; amount?: number; method?: string } | null>(null);
 
   const showApprovalToast = (message: string, type: 'success' | 'error' = 'success') => {
     setApprovalToast({ message, type });
@@ -130,6 +136,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Product Edit Modal State
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingSizeStockProduct, setEditingSizeStockProduct] = useState<Product | null>(null);
+  const [tempSizeStock, setTempSizeStock] = useState<Record<number, number>>({ 36: 0, 37: 0, 38: 0, 39: 0, 40: 0, 41: 0 });
+  const [isSavingSizeStock, setIsSavingSizeStock] = useState<boolean>(false);
   const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
   const [newProdName, setNewProdName] = useState('');
   const [newProdCategory, setNewProdCategory] = useState<
@@ -280,8 +289,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         const isPending =
           (o.orderStatus === 'Menunggu Verifikasi' ||
             o.paymentStatus === 'Menunggu Pembayaran' ||
-            o.paymentStatus === 'Menunggu Konfirmasi' ||
-            o.orderStatus === 'Pending') &&
+            o.orderStatus === 'Menunggu Pembayaran') &&
           o.paymentStatus !== 'Lunas' &&
           o.paymentStatus !== 'Ditolak';
         if (!isPending) return false;
@@ -339,8 +347,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         o &&
         (o.orderStatus === 'Menunggu Verifikasi' ||
           o.paymentStatus === 'Menunggu Pembayaran' ||
-          o.paymentStatus === 'Menunggu Konfirmasi' ||
-          o.orderStatus === 'Pending') &&
+          o.orderStatus === 'Menunggu Pembayaran') &&
         o.paymentStatus !== 'Lunas' &&
         o.paymentStatus !== 'Ditolak'
     );
@@ -948,15 +955,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       <th className="px-4 py-3.5">Kategori</th>
                       <th className="px-4 py-3.5">HPP (Modal)</th>
                       <th className="px-4 py-3.5">Harga Jual</th>
-                      <th className="px-4 py-3.5 text-center">Stok Fisik</th>
-                      <th className="px-4 py-3.5 text-center">Status</th>
+                      <th className="px-4 py-3.5 text-center">Rincian Stok (EU 36–41)</th>
+                      <th className="px-4 py-3.5 text-center">Total Fisik</th>
+                      <th className="px-4 py-3.5 text-center">Status Toko</th>
                       <th className="px-4 py-3.5 text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-pink-50">
                     {products.map((p) => {
+                      const sizeMap = getProductSizeStock(p);
+                      const totalPhysical = calculateTotalFromSizeStock(sizeMap);
                       const min = p.minStock !== undefined ? p.minStock : 5;
-                      const isLow = p.stock <= min;
+                      const isLow = totalPhysical <= min;
+                      const isOut = totalPhysical === 0;
                       const cost = p.costPrice || Math.round(p.price * 0.55);
 
                       return (
@@ -982,33 +993,75 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           <td className="px-4 py-3.5 font-mono font-bold text-[#be185d]">
                             {formatRupiah(p.price)}
                           </td>
-                          <td className="px-4 py-3.5 text-center font-mono font-bold text-gray-800">
-                            {p.stock} pasang
+
+                          {/* Rincian Stok per Ukuran 36-41 */}
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-1 flex-wrap max-w-xs mx-auto">
+                              {DEFAULT_SIZES.map((sz) => {
+                                const q = sizeMap[sz] || 0;
+                                return (
+                                  <span
+                                    key={sz}
+                                    className={`px-1.5 py-0.5 rounded-md font-mono text-[10px] font-bold border ${
+                                      q === 0
+                                        ? 'bg-gray-100 text-gray-400 border-gray-200'
+                                        : q <= 2
+                                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                        : 'bg-pink-50 text-[#be185d] border-pink-200'
+                                    }`}
+                                    title={`Ukuran EU ${sz}: ${q} pasang`}
+                                  >
+                                    {sz}:{q}
+                                  </span>
+                                );
+                              })}
+                            </div>
                           </td>
 
+                          {/* Total Fisik Otomatis dari Penjumlahan Ukuran */}
+                          <td className="px-4 py-3.5 text-center font-mono font-extrabold text-xs text-gray-900 whitespace-nowrap">
+                            <span className="bg-pink-50 text-[#be185d] px-2.5 py-1 rounded-xl border border-pink-200 inline-block font-bold">
+                              {totalPhysical} pasang
+                            </span>
+                          </td>
+
+                          {/* Status Toko */}
                           <td className="px-4 py-3.5 text-center">
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                                p.stock === 0
+                                isOut
                                   ? 'bg-red-500 text-white'
                                   : isLow
                                   ? 'bg-amber-100 text-amber-800'
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}
                             >
-                              {p.stock === 0 ? 'Habis' : isLow ? 'Stok Menipis' : 'Stok Aman'}
+                              {isOut ? 'Habis' : isLow ? 'Stok Menipis' : 'Stok Aman'}
                             </span>
                           </td>
 
+                          {/* Tombol Edit Stok & Aksi */}
                           <td className="px-4 py-3.5 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => setEditingProduct(p)}
-                                className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-pink-50 text-gray-700 hover:text-[#be185d] font-bold text-[11px] transition-colors cursor-pointer"
+                                onClick={() => {
+                                  setEditingSizeStockProduct(p);
+                                  setTempSizeStock(getProductSizeStock(p));
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-pink-100 hover:bg-[#be185d] text-[#be185d] hover:text-white font-bold text-[11px] transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+                                title="Ubah rincian stok ukuran 36-41 dan hitung total fisik otomatis"
                               >
-                                <Edit2 className="w-3.5 h-3.5 inline mr-1" />
-                                <span>Edit</span>
+                                <Sliders className="w-3.5 h-3.5" />
+                                <span>Edit Stok</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingProduct(p)}
+                                className="p-1.5 rounded-xl bg-gray-100 hover:bg-pink-50 text-gray-700 hover:text-[#be185d] font-bold text-[11px] transition-colors cursor-pointer"
+                                title="Edit Detail Sepatu"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 type="button"
@@ -1521,46 +1574,107 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                 <Receipt className="w-3.5 h-3.5 text-pink-600" />
                                 <span>Bukti Pembayaran / Slip Transfer:</span>
                               </span>
+                              {ord.paymentProofUrl ? (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                  ✓ Foto Asli Diunggah
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                  Belum Ada Foto
+                                </span>
+                              )}
                             </div>
 
-                            <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-gray-200 text-[11px]">
-                              <div>
-                                <p className="font-semibold text-gray-800">
-                                  {ord.paymentMethod?.includes('QRIS') ? 'QRIS Indonesia (NMID Terdaftar)' : `${ord.paymentMethod || 'Bank Transfer'}`}
-                                </p>
-                                <p className="text-[10px] text-gray-500">
-                                  Cek mutasi rekening / konfirmasi bukti bayar
-                                </p>
+                            {ord.paymentProofUrl ? (
+                              <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-emerald-200 text-[11px] gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div
+                                    onClick={() => {
+                                      setZoomedProofImage({
+                                        url: ord.paymentProofUrl,
+                                        orderNumber: ord.orderNumber,
+                                        customerName: ord.customerName,
+                                        amount: ord.totalAmount,
+                                        method: ord.paymentMethod,
+                                      });
+                                    }}
+                                    className="w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 bg-white shrink-0 shadow-2xs cursor-pointer hover:opacity-90 transition-opacity"
+                                    title="Klik untuk zoom foto bukti"
+                                  >
+                                    <img
+                                      src={ord.paymentProofUrl}
+                                      alt="Bukti Transfer Asli"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-gray-900 truncate">
+                                      {ord.paymentMethod?.includes('QRIS') ? 'QRIS Indonesia' : `${ord.paymentMethod || 'Bank Transfer'}`}
+                                    </p>
+                                    <p className="text-[10px] text-emerald-700 font-medium">
+                                      Foto bukti transfer asli pelanggan
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setZoomedProofImage({
+                                      url: ord.paymentProofUrl,
+                                      orderNumber: ord.orderNumber,
+                                      customerName: ord.customerName,
+                                      amount: ord.totalAmount,
+                                      method: ord.paymentMethod,
+                                    });
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-lg bg-pink-50 hover:bg-pink-100 text-[#be185d] font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors shrink-0 border border-pink-200"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>Lihat Bukti Foto Asli</span>
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setZoomedProofImage({
-                                    url: (ord as any).paymentProofUrl || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
-                                    orderNumber: ord.orderNumber,
-                                    customerName: ord.customerName,
-                                    amount: ord.totalAmount,
-                                    method: ord.paymentMethod,
-                                  });
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-pink-50 hover:bg-pink-100 text-[#be185d] font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
-                              >
-                                <Eye className="w-3 h-3" />
-                                <span>Lihat Bukti</span>
-                              </button>
-                            </div>
+                            ) : (
+                              <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                  <div>
+                                    <p className="font-bold text-[11px] leading-tight">Bukti pembayaran belum tersedia</p>
+                                    <p className="text-[10px] text-amber-700 leading-tight mt-0.5">
+                                      Pelanggan belum mengunggah foto struk transfer
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setZoomedProofImage({
+                                      url: undefined,
+                                      orderNumber: ord.orderNumber,
+                                      customerName: ord.customerName,
+                                      amount: ord.totalAmount,
+                                      method: ord.paymentMethod,
+                                    });
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-white hover:bg-amber-100 text-amber-800 font-bold text-[10px] border border-amber-300 transition-colors shrink-0 cursor-pointer"
+                                >
+                                  Cek Status
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           {/* Items Preview */}
                           <div className="text-[11px] space-y-1 text-gray-600 border-t border-gray-100 pt-2">
                             <span className="font-bold text-gray-700 block text-[10px] uppercase tracking-wider mb-1">
-                              Produk ({((ord.items || []).reduce((s, it) => s + (it.quantity || 1), 0))} pasang):
+                              Produk ({((ord.items || []).reduce((s, it) => s + (Number(it?.quantity) || 1), 0))} pasang):
                             </span>
                             {(ord.items || []).map((it, idx) => (
                               <div key={idx} className="flex justify-between items-center text-xs">
-                                <span className="truncate pr-2">{it.name} (EU {it.size}) x{it.quantity}</span>
+                                <span className="truncate pr-2">
+                                  {it?.name || 'Flatshoes Mochi'} (EU {it?.size || '-'}) x{it?.quantity || 1}
+                                </span>
                                 <span className="font-mono font-semibold text-gray-800 shrink-0">
-                                  {formatRupiah((Number(it.price) || 0) * (Number(it.quantity) || 1))}
+                                  {formatRupiah((Number(it?.price) || 0) * (Number(it?.quantity) || 1))}
                                 </span>
                               </div>
                             ))}
@@ -1695,9 +1809,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                       </>
                                     )}
                                   </span>
-                                  {ord.specialNotes?.includes('Ditolak:') && (
-                                    <p className="text-[10px] text-red-600 mt-1 max-w-[180px] truncate" title={ord.specialNotes}>
-                                      {ord.specialNotes.split('Ditolak:')[1]?.trim()}
+                                  {(ord.rejectionReason || (typeof ord.specialNotes === 'string' && ord.specialNotes.includes('Ditolak:'))) && (
+                                    <p className="text-[10px] text-red-600 mt-1 max-w-[180px] truncate" title={ord.rejectionReason || ord.specialNotes}>
+                                      {ord.rejectionReason || (ord.specialNotes && ord.specialNotes.split('Ditolak:')[1]?.trim()) || 'Ditolak Admin'}
                                     </p>
                                   )}
                                 </td>
@@ -1905,6 +2019,79 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
 
+            {/* Bukti Pembayaran / Struk Transfer Pelanggan */}
+            <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-800 text-[11px] flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-[#be185d]" />
+                  <span>Bukti Pembayaran / Slip Transfer:</span>
+                </span>
+                {selectedOrderDetail.paymentProofUrl ? (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    ✓ Foto Asli Diunggah
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    Belum Ada Foto
+                  </span>
+                )}
+              </div>
+
+              {selectedOrderDetail.paymentProofUrl ? (
+                <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-emerald-200 gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      onClick={() => {
+                        setZoomedProofImage({
+                          url: selectedOrderDetail.paymentProofUrl,
+                          orderNumber: selectedOrderDetail.orderNumber,
+                          customerName: selectedOrderDetail.customerName,
+                          amount: selectedOrderDetail.totalAmount,
+                          method: selectedOrderDetail.paymentMethod,
+                        });
+                      }}
+                      className="w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 bg-gray-100 shrink-0 cursor-pointer shadow-2xs hover:opacity-90 transition-opacity"
+                      title="Klik untuk zoom"
+                    >
+                      <img
+                        src={selectedOrderDetail.paymentProofUrl}
+                        alt="Bukti Transfer Asli"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{selectedOrderDetail.paymentMethod}</p>
+                      <p className="text-[10px] text-emerald-700">Foto bukti transfer asli milik pesanan ini</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoomedProofImage({
+                        url: selectedOrderDetail.paymentProofUrl,
+                        orderNumber: selectedOrderDetail.orderNumber,
+                        customerName: selectedOrderDetail.customerName,
+                        amount: selectedOrderDetail.totalAmount,
+                        method: selectedOrderDetail.paymentMethod,
+                      });
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-pink-50 hover:bg-pink-100 text-[#be185d] font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors shrink-0 border border-pink-200"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>Lihat Bukti Foto Asli</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-amber-50/80 rounded-xl border border-amber-200 text-[11px] text-amber-800 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <div>
+                    <p className="font-bold">Bukti pembayaran belum tersedia</p>
+                    <p className="text-[10px] text-amber-700">Pelanggan belum mengunggah foto struk transfer.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Tracking Resi Input & Courier */}
             <div className="bg-gray-50 p-3.5 rounded-2xl text-xs space-y-2">
               <span className="font-bold text-gray-800 block">Kurir & Nomor Resi Pengiriman:</span>
@@ -1944,13 +2131,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       type="button"
                       onClick={async () => {
                         try {
-                          await updateOrderStatus(selectedOrderDetail.id, status);
-                          setSelectedOrderDetail({
-                            ...selectedOrderDetail,
-                            orderStatus: status,
-                          });
-                        } catch (err) {
-                          alert('Gagal memperbarui status pesanan.');
+                          if (status === 'Dibatalkan') {
+                            if (confirm(`Batalkan pesanan #${selectedOrderDetail.orderNumber}? Stok ukuran sepatu akan otomatis dipulihkan ke database.`)) {
+                              await cancelCustomerOrder(selectedOrderDetail, 'Dibatalkan oleh Admin');
+                              setSelectedOrderDetail({
+                                ...selectedOrderDetail,
+                                orderStatus: 'Dibatalkan',
+                                stockRestored: true,
+                              });
+                              showApprovalToast(`Pesanan #${selectedOrderDetail.orderNumber} dibatalkan & stok telah dipulihkan.`, 'success');
+                            }
+                          } else {
+                            await updateOrderStatus(selectedOrderDetail.id, status);
+                            setSelectedOrderDetail({
+                              ...selectedOrderDetail,
+                              orderStatus: status,
+                            });
+                            showApprovalToast(`Status pesanan diperbarui menjadi ${status}`, 'success');
+                          }
+                        } catch (err: any) {
+                          console.error(err);
+                          showApprovalToast(`Gagal memperbarui status: ${err?.message || 'Error'}`, 'error');
                         }
                       }}
                       className={`py-2 px-2 rounded-xl font-bold text-xs transition-all cursor-pointer text-center ${
@@ -2081,6 +2282,164 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   Simpan Perubahan
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: EDIT RINCIAN STOK UKURAN 36–41 (TOTAL FISIK OTOMATIS) ================= */}
+      {editingSizeStockProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 p-6 sm:p-7 space-y-5">
+            <button
+              onClick={() => setEditingSizeStockProduct(null)}
+              className="absolute top-5 right-5 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-pink-50 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3.5 border-b border-pink-100 pb-4">
+              <div className="w-14 h-14 rounded-2xl overflow-hidden bg-pink-50 border border-pink-200 shrink-0">
+                <FlatshoeImage
+                  src={editingSizeStockProduct.imageUrl}
+                  alt={editingSizeStockProduct.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md">
+                  Pengelolaan Stok Ukuran
+                </span>
+                <h3 className="font-heading font-extrabold text-base text-gray-900 mt-0.5">
+                  {editingSizeStockProduct.name}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {editingSizeStockProduct.category} • {editingSizeStockProduct.color}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Live Physical Total Box */}
+              <div className="flex items-center justify-between bg-gradient-to-r from-pink-50 to-pink-100/60 p-4 rounded-2xl border border-pink-200">
+                <div>
+                  <span className="text-xs font-bold text-gray-800 block">
+                    Total Fisik Otomatis (Penjumlahan Ukuran):
+                  </span>
+                  <span className="text-[11px] text-gray-500">
+                    Otomatis sinkron ke katalog & sistem kasir real-time
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono font-extrabold text-2xl text-[#be185d]">
+                    {calculateTotalFromSizeStock(tempSizeStock)}
+                  </span>
+                  <span className="text-xs font-bold text-gray-600 ml-1">pasang</span>
+                </div>
+              </div>
+
+              {/* Grid 6 Sizes (36, 37, 38, 39, 40, 41) */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {DEFAULT_SIZES.map((size) => {
+                  const val = tempSizeStock[size] !== undefined ? tempSizeStock[size] : 0;
+                  return (
+                    <div
+                      key={size}
+                      className="bg-gray-50/80 p-3 rounded-2xl border border-gray-200/90 space-y-1.5 focus-within:border-pink-300 focus-within:bg-pink-50/20 transition-all"
+                    >
+                      <div className="flex justify-between items-center text-xs font-bold">
+                        <span className="text-gray-800">Ukuran EU {size}</span>
+                        <span className="text-[10px] text-gray-400">pasang</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempSizeStock((prev) => ({
+                              ...prev,
+                              [size]: Math.max(0, (prev[size] || 0) - 1),
+                            }));
+                          }}
+                          className="w-8 h-8 rounded-xl bg-white hover:bg-pink-100 text-gray-700 font-bold border border-gray-200 flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          value={val}
+                          onChange={(e) => {
+                            const n = Math.max(0, parseInt(e.target.value) || 0);
+                            setTempSizeStock((prev) => ({
+                              ...prev,
+                              [size]: n,
+                            }));
+                          }}
+                          className="w-full text-center font-mono font-extrabold text-sm py-1.5 rounded-xl bg-white border border-gray-200 focus:outline-hidden focus:ring-2 focus:ring-pink-300 shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempSizeStock((prev) => ({
+                              ...prev,
+                              [size]: (prev[size] || 0) + 1,
+                            }));
+                          }}
+                          className="w-8 h-8 rounded-xl bg-white hover:bg-pink-100 text-gray-700 font-bold border border-gray-200 flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-2 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={isSavingSizeStock}
+                onClick={() => setEditingSizeStockProduct(null)}
+                className="py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSavingSizeStock}
+                onClick={async () => {
+                  if (!editingSizeStockProduct) return;
+                  setIsSavingSizeStock(true);
+                  try {
+                    const newTotal = await updateProductSizeStock(
+                      editingSizeStockProduct.id,
+                      tempSizeStock,
+                      `Admin (${adminEmail})`
+                    );
+                    showApprovalToast(
+                      `Stok "${editingSizeStockProduct.name}" berhasil diperbarui! Total fisik kini ${newTotal} pasang.`,
+                      'success'
+                    );
+                    setEditingSizeStockProduct(null);
+                  } catch (err: any) {
+                    console.error('Save sizeStock error:', err);
+                    showApprovalToast(`Gagal menyimpan stok: ${err?.message || 'Error'}`, 'error');
+                  } finally {
+                    setIsSavingSizeStock(false);
+                  }
+                }}
+                className="py-2.5 rounded-xl bg-gradient-to-r from-[#d65b7d] to-[#be185d] hover:brightness-105 text-white font-bold text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {isSavingSizeStock ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menyimpan ke Database...</span>
+                  </>
+                ) : (
+                  <span>Simpan Perubahan Stok</span>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -2363,38 +2722,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               ) : null}
             </div>
 
-            {/* Simulated / Actual Receipt Preview */}
-            <div className="border border-gray-200 rounded-2xl overflow-hidden bg-gray-50 text-center p-4">
-              <div className="max-w-xs mx-auto bg-white p-5 rounded-xl border border-gray-300 shadow-xs font-mono text-[11px] text-left space-y-2 text-gray-800">
-                <div className="text-center border-b border-dashed border-gray-300 pb-2">
-                  <p className="font-bold text-xs text-gray-900">BUKTI TRANSFER BERHASIL</p>
-                  <p className="text-[10px] text-gray-400">{zoomedProofImage.method || 'TRANSFER BANK'}</p>
-                </div>
-                <div className="space-y-1 text-[10px]">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Pengirim:</span>
-                    <span className="font-bold">{zoomedProofImage.customerName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Penerima:</span>
-                    <span className="font-bold">PT MOCHI STEPS INDONESIA</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">No. Referensi:</span>
-                    <span className="font-mono">TRX-{zoomedProofImage.orderNumber}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-200 pt-1 text-xs">
-                    <span className="font-bold">Total Transfer:</span>
-                    <span className="font-bold text-[#be185d]">
-                      {zoomedProofImage.amount ? formatRupiah(zoomedProofImage.amount) : 'Lunas'}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-center pt-2 border-t border-dashed border-gray-300 text-[9px] text-emerald-600 font-bold">
-                  ✓ TRANSAKSI DITERIMA OLEH BANK
-                </div>
+            {/* TAMPILAN BUKTI TRANSFER ASLI ATAU STATUS BELUM TERSEDIA */}
+            {zoomedProofImage.url ? (
+              <div className="border border-pink-200 rounded-2xl overflow-hidden bg-gray-950/5 p-2 flex flex-col items-center justify-center min-h-[260px] text-center">
+                <img
+                  src={zoomedProofImage.url}
+                  alt={`Bukti Pembayaran Pesanan #${zoomedProofImage.orderNumber}`}
+                  className="max-h-[60vh] w-auto max-w-full rounded-xl object-contain shadow-md"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.style.display = 'none';
+                    const parent = target.parentElement;
+                    if (parent) {
+                      const errMsg = document.createElement('div');
+                      errMsg.className = 'p-6 text-center text-xs text-red-600 font-bold';
+                      errMsg.innerText = 'Foto bukti pembayaran gagal dimuat atau format file tidak didukung.';
+                      parent.appendChild(errMsg);
+                    }
+                  }}
+                />
+                <p className="text-[10px] text-gray-400 mt-2">
+                  File bukti transfer asli yang diunggah oleh pelanggan untuk pesanan #{zoomedProofImage.orderNumber}
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
+                <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+                <p className="font-bold text-gray-800 text-sm">Bukti pembayaran belum tersedia</p>
+                <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                  Pelanggan belum mengunggah foto struk transfer untuk pesanan #{zoomedProofImage.orderNumber}. Anda dapat menghubungi pelanggan via WhatsApp untuk meminta bukti transfer jika diperlukan.
+                </p>
+              </div>
+            )}
 
             <button
               type="button"
@@ -2422,9 +2781,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
           )}
           <span className="leading-snug">{approvalToast.message}</span>
-        </div>
-      )}
-          </div>
         </div>
       )}
     </div>

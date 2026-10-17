@@ -1,0 +1,56 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mochiRibbonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f38ba8" />
+      <stop offset="50%" stop-color="#e26d8d" />
+      <stop offset="100%" stop-color="#be185d" />
+    </linearGradient>
+    <linearGradient id="shoeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#fff2eb" />
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#862744" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle badge -->
+  <circle cx="60" cy="60" r="56" fill="#fdeef1" />
+  <circle cx="60" cy="60" r="54" stroke="#fad4dd" stroke-width="2" />
+
+  <!-- Main ribbon 'M' structure -->
+  <path
+    d="M28 78 C25 64 30 45 44 34 C54 26 62 38 52 54 C46 63 38 72 34 82 C33 84 30 83 28 78 Z"
+    fill="url(#mochiRibbonGrad)"
+  />
+  <path
+    d="M58 48 C66 32 78 28 88 38 C96 46 95 65 92 78 C90 83 85 83 84 80 C82 72 82 58 76 50 C70 42 62 44 58 48 Z"
+    fill="url(#mochiRibbonGrad)"
+  />
+
+  <!-- Chic cream flat shoe silhouette -->
+  <g filter="url(#softShadow)">
+    <path
+      d="M38 74 C44 70 55 68 70 69 C78 70 85 73 88 77 C90 80 87 83 80 84 C68 85 45 84 38 80 C36 78 36 75 38 74 Z"
+      fill="url(#shoeGrad)"
+      stroke="#e26d8d"
+      stroke-width="1.5"
+    />
+    <!-- Insole line & cushion indicator -->
+    <path
+      d="M44 75 C52 72 65 72 78 74"
+      stroke="#f38ba8"
+      stroke-width="1.2"
+      stroke-linecap="round"
+      stroke-dasharray="2 2"
+    />
+    <!-- Delicate toe bow -->
+    <circle cx="78" cy="74" r="2.5" fill="#be185d" />
+  </g>
+
+  <!-- Heart sparkle near top loop -->
+  <path
+    d="M56 32 C56 30 53 28 50 30 C47 28 44 30 44 32 C44 35 50 39 50 39 C50 39 56 35 56 32 Z"
+    fill="#be185d"
+  />
+</svg>

@@ -263,6 +263,41 @@ export async function seedProductsIfEmpty(): Promise<boolean> {
   }
 }
 
+// Default size array for Mochi Steps flatshoes
+export const DEFAULT_SIZES = [36, 37, 38, 39, 40, 41];
+
+// Helper: Calculate total stock from sizeStock map
+export function calculateTotalFromSizeStock(sizeStock: Record<number, number>): number {
+  return DEFAULT_SIZES.reduce((sum, s) => sum + (Number(sizeStock[s]) || 0), 0);
+}
+
+// Helper: Retrieve or generate sizeStock with guaranteed sizes 36-41 matching total stock
+export function getProductSizeStock(product: { stock?: number; sizeStock?: Record<number, number> }): Record<number, number> {
+  const result: Record<number, number> = { 36: 0, 37: 0, 38: 0, 39: 0, 40: 0, 41: 0 };
+  if (product.sizeStock && typeof product.sizeStock === 'object') {
+    let hasAny = false;
+    for (const s of DEFAULT_SIZES) {
+      if (product.sizeStock[s] !== undefined) {
+        result[s] = Math.max(0, Number(product.sizeStock[s]) || 0);
+        hasAny = true;
+      }
+    }
+    if (hasAny) {
+      return result;
+    }
+  }
+
+  // Fallback: distribute current stock evenly across sizes 36-41
+  const total = Math.max(0, Number(product.stock) || 0);
+  const base = Math.floor(total / 6);
+  let rem = total % 6;
+  for (const s of DEFAULT_SIZES) {
+    result[s] = base + (rem > 0 ? 1 : 0);
+    if (rem > 0) rem--;
+  }
+  return result;
+}
+
 // Real-time subscription to Products
 export function subscribeToProducts(
   onData: (products: Product[]) => void,
@@ -275,14 +310,21 @@ export function subscribeToProducts(
       const products: Product[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        const rawStock = Number(data.stock) || 0;
+        const sizeStock = getProductSizeStock(data as any);
+        // Ensure total stock always equals sum of sizeStock
+        const calculatedStock = calculateTotalFromSizeStock(sizeStock);
+        const finalStock = calculatedStock > 0 ? calculatedStock : rawStock;
+
         products.push({
           id: docSnap.id,
           name: data.name || '',
           category: data.category || 'Flat Shoes Klasik',
           price: Number(data.price) || 0,
           costPrice: data.costPrice !== undefined ? Number(data.costPrice) : Math.round((Number(data.price) || 199000) * 0.5),
-          stock: Number(data.stock) || 0,
-          sizes: data.sizes || [36, 37, 38, 39, 40, 41],
+          stock: finalStock,
+          sizes: data.sizes || DEFAULT_SIZES,
+          sizeStock,
           description: data.description || '',
           imageUrl: data.imageUrl || '',
           color: data.color || 'Pink Pastel',
@@ -291,16 +333,17 @@ export function subscribeToProducts(
           reviewCount: Number(data.reviewCount) || 50,
           material: data.material || 'Microfiber Leather',
           heelHeight: data.heelHeight || '1 cm Flat',
+          minStock: data.minStock !== undefined ? Number(data.minStock) : 5,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         });
       });
-      // Sort alphabetically or by id
+      // Sort alphabetically by id
       products.sort((a, b) => a.id.localeCompare(b.id));
       onData(products);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.GET, 'products');
+      console.warn('Realtime products subscription error:', error);
       onError?.(error instanceof Error ? error : new Error(String(error)));
     }
   );
@@ -343,6 +386,9 @@ export function subscribeToOrders(
           discountAmount: d.discountAmount !== undefined ? Number(d.discountAmount) : 0,
           receiptNumber: d.receiptNumber || undefined,
           trackingNumber: d.trackingNumber || undefined,
+          paymentProofUrl: d.paymentProofUrl || undefined,
+          stockRestored: !!d.stockRestored,
+          rejectionReason: d.rejectionReason || undefined,
           createdAt: d.createdAt || new Date().toISOString(),
           updatedAt: d.updatedAt || new Date().toISOString(),
         });
@@ -352,7 +398,7 @@ export function subscribeToOrders(
       onData(orders);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.GET, 'orders');
+      console.warn('Realtime orders subscription error:', error);
       onError?.(error instanceof Error ? error : new Error(String(error)));
     }
   );
@@ -374,6 +420,8 @@ export function subscribeToStockMutations(
           id: docSnap.id,
           productId: d.productId || '',
           productName: d.productName || '',
+          size: d.size ? Number(d.size) : undefined,
+          orderNumber: d.orderNumber || undefined,
           type: d.type || 'IN',
           quantity: Number(d.quantity) || 0,
           notes: d.notes || '',
@@ -388,21 +436,30 @@ export function subscribeToStockMutations(
       onData(mutations);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.GET, 'stock_mutations');
+      console.warn('Realtime stock_mutations subscription error:', error);
       onError?.(error instanceof Error ? error : new Error(String(error)));
     }
   );
 }
 
-// Create new customer order with atomic stock update & mutation logging
+// Create new customer order with atomic stock per size update & mutation logging
 export async function createCustomerOrder(orderData: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
   const now = new Date().toISOString();
   const orderDocRef = doc(collection(db, 'orders'));
 
   try {
     await runTransaction(db, async (transaction) => {
-      // 1. Verify and read all product stocks first
-      const productDocs: { ref: any; currentStock: number; id: string; name: string; qty: number }[] = [];
+      // 1. Verify and read all product stocks first (ALL READS FIRST)
+      const productDocs: {
+        ref: any;
+        id: string;
+        name: string;
+        currentStock: number;
+        currentSizeStock: Record<number, number>;
+        newSizeStock: Record<number, number>;
+        newStock: number;
+        items: typeof orderData.items;
+      }[] = [];
 
       for (const item of orderData.items) {
         const pRef = doc(db, 'products', item.productId);
@@ -410,46 +467,67 @@ export async function createCustomerOrder(orderData: Omit<Order, 'id' | 'created
         if (!pSnap.exists()) {
           throw new Error(`Produk "${item.name}" tidak ditemukan di database.`);
         }
-        const currentStock = Number(pSnap.data().stock) || 0;
-        if (currentStock < item.quantity) {
-          throw new Error(`Maaf, stok sepatu "${item.name}" tersisa ${currentStock} pasang, tidak mencukupi untuk ${item.quantity} pasang.`);
+        const pData = pSnap.data();
+        const currentTotal = Number(pData.stock) || 0;
+        const currentSizeStock = getProductSizeStock(pData as any);
+        const itemSize = Number(item.size);
+        const availableInSize = currentSizeStock[itemSize] !== undefined ? currentSizeStock[itemSize] : currentTotal;
+
+        if (availableInSize < item.quantity) {
+          throw new Error(
+            `Maaf, stok sepatu "${item.name}" ukuran ${itemSize} tersisa ${availableInSize} pasang, tidak mencukupi untuk pesanan ${item.quantity} pasang.`
+          );
         }
+
+        const newSizeStock = { ...currentSizeStock };
+        newSizeStock[itemSize] = Math.max(0, (newSizeStock[itemSize] || 0) - item.quantity);
+        const newStock = calculateTotalFromSizeStock(newSizeStock);
+
         productDocs.push({
           ref: pRef,
-          currentStock,
           id: item.productId,
           name: item.name,
-          qty: item.quantity,
+          currentStock: currentTotal,
+          currentSizeStock,
+          newSizeStock,
+          newStock,
+          items: [item],
         });
       }
 
-      // 2. Decrement stock for each product and record mutation
+      // 2. ALL WRITES AFTER READS
+      // Decrement sizeStock and total stock for each product
       for (const p of productDocs) {
-        const newStock = p.currentStock - p.qty;
         transaction.update(p.ref, {
-          stock: newStock,
+          sizeStock: p.newSizeStock,
+          stock: p.newStock,
           updatedAt: now,
         });
 
-        const mutationRef = doc(collection(db, 'stock_mutations'));
-        transaction.set(mutationRef, {
-          id: mutationRef.id,
-          productId: p.id,
-          productName: p.name,
-          type: 'OUT',
-          quantity: p.qty,
-          notes: `Pesanan Baru #${orderData.orderNumber} (${orderData.customerName})`,
-          previousStock: p.currentStock,
-          newStock,
-          timestamp: now,
-          actor: 'Sistem Checkout Pelanggan',
-        });
+        for (const item of p.items) {
+          const mutationRef = doc(collection(db, 'stock_mutations'));
+          transaction.set(mutationRef, {
+            id: mutationRef.id,
+            productId: p.id,
+            productName: p.name,
+            size: Number(item.size),
+            orderNumber: orderData.orderNumber,
+            type: 'OUT',
+            quantity: item.quantity,
+            notes: `Pesanan Baru #${orderData.orderNumber} (Ukuran ${item.size} x${item.quantity}) - ${orderData.customerName}`,
+            previousStock: p.currentStock,
+            newStock: p.newStock,
+            timestamp: now,
+            actor: 'Pelanggan (Checkout Webstore)',
+          });
+        }
       }
 
-      // 3. Write Order document
+      // 3. Write Order document with stockRestored: false
       transaction.set(orderDocRef, {
         ...orderData,
         id: orderDocRef.id,
+        stockRestored: false,
         createdAt: now,
         updatedAt: now,
       });
@@ -481,7 +559,7 @@ export async function createCustomerOrder(orderData: Omit<Order, 'id' | 'created
 }
 
 // Approve payment: marks as Lunas and Disetujui
-// Approve payment: marks as Lunas and Disetujui
+// Stock stays decremented and is NEVER deducted again
 export async function approvePayment(order: Order, adminEmail: string = 'Admin'): Promise<void> {
   const now = new Date().toISOString();
   const orderRef = doc(db, 'orders', order.id);
@@ -498,37 +576,71 @@ export async function approvePayment(order: Order, adminEmail: string = 'Admin')
     );
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `orders/${order.id}`);
+    throw error;
   }
 }
 
-// Reject payment: marks as Ditolak and restores stock atomically
+// Reject payment: marks as Ditolak and restores size-specific stock atomically (Idempotent: only 1x)
 export async function rejectPayment(order: Order, reason: string = 'Bukti/Pembayaran tidak valid'): Promise<void> {
   const now = new Date().toISOString();
   const orderRef = doc(db, 'orders', order.id);
 
   try {
     await runTransaction(db, async (transaction) => {
-      // 1. ALL READS FIRST (Firestore rule: all reads before any writes)
-      const productDocs: { ref: any; currentStock: number; restoredStock: number; item: any }[] = [];
-      const itemsList = order.items || [];
+      // 1. ALL READS FIRST
+      const oSnap = await transaction.get(orderRef);
+      const oData = oSnap.exists() ? oSnap.data() : order;
 
+      // Idempotency: if already restored or already rejected, do not restore stock again!
+      if (oData.stockRestored === true) {
+        console.warn(`Order #${order.orderNumber} stock has already been restored.`);
+        transaction.update(orderRef, {
+          paymentStatus: 'Ditolak',
+          orderStatus: 'Ditolak',
+          rejectionReason: reason,
+          updatedAt: now,
+        });
+        return;
+      }
+
+      const productDocs: {
+        ref: any;
+        currentStock: number;
+        newSizeStock: Record<number, number>;
+        restoredStock: number;
+        item: any;
+      }[] = [];
+
+      const itemsList = order.items || [];
       for (const item of itemsList) {
         if (!item?.productId) continue;
         const pRef = doc(db, 'products', item.productId);
         const pSnap = await transaction.get(pRef);
         if (pSnap.exists()) {
-          const currentStock = Number(pSnap.data().stock) || 0;
-          const restoredStock = currentStock + (Number(item.quantity) || 1);
-          productDocs.push({ ref: pRef, currentStock, restoredStock, item });
+          const pData = pSnap.data();
+          const currentStock = Number(pData.stock) || 0;
+          const currentSizeStock = getProductSizeStock(pData as any);
+          const itemSize = Number(item.size);
+          const itemQty = Number(item.quantity) || 1;
+
+          const newSizeStock = { ...currentSizeStock };
+          newSizeStock[itemSize] = (newSizeStock[itemSize] || 0) + itemQty;
+          const restoredStock = calculateTotalFromSizeStock(newSizeStock);
+
+          productDocs.push({
+            ref: pRef,
+            currentStock,
+            newSizeStock,
+            restoredStock,
+            item,
+          });
         }
       }
 
-      // Check order doc exists
-      const oSnap = await transaction.get(orderRef);
-
-      // 2. ALL WRITES AFTER ALL READS ARE COMPLETED
+      // 2. ALL WRITES AFTER READS
       for (const p of productDocs) {
         transaction.update(p.ref, {
+          sizeStock: p.newSizeStock,
           stock: p.restoredStock,
           updatedAt: now,
         });
@@ -538,9 +650,11 @@ export async function rejectPayment(order: Order, reason: string = 'Bukti/Pembay
           id: mutationRef.id,
           productId: p.item.productId,
           productName: p.item.name || 'Flatshoes Mochi Steps',
+          size: Number(p.item.size),
+          orderNumber: order.orderNumber,
           type: 'IN',
           quantity: p.item.quantity || 1,
-          notes: `Restorasi Stok: Pembatalan/Tolak #${order.orderNumber} (${reason})`,
+          notes: `Restorasi Stok: Pembayaran Ditolak #${order.orderNumber} (Ukuran ${p.item.size} - ${reason})`,
           previousStock: p.currentStock,
           newStock: p.restoredStock,
           timestamp: now,
@@ -551,30 +665,162 @@ export async function rejectPayment(order: Order, reason: string = 'Bukti/Pembay
       const noteSuffix = `Ditolak: ${reason}`;
       const updatedNotes = order.specialNotes ? `${order.specialNotes} | ${noteSuffix}` : noteSuffix;
 
-      if (oSnap.exists()) {
-        transaction.update(orderRef, {
+      transaction.set(
+        orderRef,
+        {
+          ...order,
           paymentStatus: 'Ditolak',
           orderStatus: 'Ditolak',
+          rejectionReason: reason,
+          stockRestored: true,
           specialNotes: updatedNotes,
           updatedAt: now,
-        });
-      } else {
-        transaction.set(
-          orderRef,
-          {
-            ...order,
-            paymentStatus: 'Ditolak',
-            orderStatus: 'Ditolak',
-            specialNotes: updatedNotes,
-            updatedAt: now,
-          },
-          { merge: true }
-        );
-      }
+        },
+        { merge: true }
+      );
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `orders/${order.id}`);
+    throw error;
   }
+}
+
+// Cancel Order (by Customer or Admin): restores size-specific stock once (Idempotent)
+export async function cancelCustomerOrder(order: Order, reason: string = 'Dibatalkan oleh Pelanggan'): Promise<void> {
+  const now = new Date().toISOString();
+  const orderRef = doc(db, 'orders', order.id);
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const oSnap = await transaction.get(orderRef);
+      const oData = oSnap.exists() ? oSnap.data() : order;
+
+      // Idempotency: only restore stock once
+      if (oData.stockRestored === true) {
+        transaction.update(orderRef, {
+          orderStatus: 'Dibatalkan',
+          updatedAt: now,
+        });
+        return;
+      }
+
+      const productDocs: {
+        ref: any;
+        currentStock: number;
+        newSizeStock: Record<number, number>;
+        restoredStock: number;
+        item: any;
+      }[] = [];
+
+      for (const item of (order.items || [])) {
+        if (!item?.productId) continue;
+        const pRef = doc(db, 'products', item.productId);
+        const pSnap = await transaction.get(pRef);
+        if (pSnap.exists()) {
+          const pData = pSnap.data();
+          const currentStock = Number(pData.stock) || 0;
+          const currentSizeStock = getProductSizeStock(pData as any);
+          const itemSize = Number(item.size);
+          const itemQty = Number(item.quantity) || 1;
+
+          const newSizeStock = { ...currentSizeStock };
+          newSizeStock[itemSize] = (newSizeStock[itemSize] || 0) + itemQty;
+          const restoredStock = calculateTotalFromSizeStock(newSizeStock);
+
+          productDocs.push({
+            ref: pRef,
+            currentStock,
+            newSizeStock,
+            restoredStock,
+            item,
+          });
+        }
+      }
+
+      for (const p of productDocs) {
+        transaction.update(p.ref, {
+          sizeStock: p.newSizeStock,
+          stock: p.restoredStock,
+          updatedAt: now,
+        });
+
+        const mutationRef = doc(collection(db, 'stock_mutations'));
+        transaction.set(mutationRef, {
+          id: mutationRef.id,
+          productId: p.item.productId,
+          productName: p.item.name || 'Flatshoes Mochi Steps',
+          size: Number(p.item.size),
+          orderNumber: order.orderNumber,
+          type: 'IN',
+          quantity: p.item.quantity || 1,
+          notes: `Restorasi Stok: Pesanan Dibatalkan #${order.orderNumber} (${reason})`,
+          previousStock: p.currentStock,
+          newStock: p.restoredStock,
+          timestamp: now,
+          actor: 'Sistem Pembatalan Pesanan',
+        });
+      }
+
+      transaction.set(
+        orderRef,
+        {
+          ...order,
+          orderStatus: 'Dibatalkan',
+          stockRestored: true,
+          rejectionReason: reason,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `orders/${order.id}`);
+    throw error;
+  }
+}
+
+// Update sizeStock directly from Admin "Edit Stok" Modal
+// Total physical stock is automatically calculated from sum(size 36..41)
+export async function updateProductSizeStock(
+  productId: string,
+  newSizeStock: Record<number, number>,
+  actor: string = 'Admin'
+): Promise<number> {
+  const now = new Date().toISOString();
+  const productRef = doc(db, 'products', productId);
+
+  let newTotal = 0;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(productRef);
+    if (!snap.exists()) {
+      throw new Error(`Produk dengan ID ${productId} tidak ditemukan.`);
+    }
+    const currentData = snap.data();
+    const prevStock = Number(currentData.stock) || 0;
+    newTotal = calculateTotalFromSizeStock(newSizeStock);
+
+    transaction.update(productRef, {
+      sizeStock: newSizeStock,
+      stock: newTotal,
+      updatedAt: now,
+    });
+
+    const mutationRef = doc(collection(db, 'stock_mutations'));
+    transaction.set(mutationRef, {
+      id: mutationRef.id,
+      productId,
+      productName: currentData.name || 'Flatshoes Mochi Steps',
+      type: 'ADJUSTMENT',
+      quantity: Math.abs(newTotal - prevStock),
+      notes: `Penyesuaian Manual Stok per Ukuran 36–41 (Total: ${prevStock} → ${newTotal} pasang)`,
+      previousStock: prevStock,
+      newStock: newTotal,
+      timestamp: now,
+      actor: actor,
+    });
+  });
+
+  return newTotal;
 }
 
 // Update order status (e.g. to 'Dikirim' or 'Selesai')
@@ -584,6 +830,20 @@ export async function updateOrderStatus(orderId: string, orderStatus: OrderStatu
   try {
     await updateDoc(orderRef, {
       orderStatus,
+      updatedAt: now,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+  }
+}
+
+// Update payment proof URL uploaded by customer for specific order
+export async function updateOrderPaymentProof(orderId: string, paymentProofUrl: string): Promise<void> {
+  const now = new Date().toISOString();
+  const orderRef = doc(db, 'orders', orderId);
+  try {
+    await updateDoc(orderRef, {
+      paymentProofUrl,
       updatedAt: now,
     });
   } catch (error) {
@@ -777,7 +1037,17 @@ export async function createPosTransaction(input: PosTransactionInput): Promise<
   try {
     await runTransaction(db, async (transaction) => {
       // 1. Verify and read all product stocks first (ALL READS MUST BE FIRST)
-      const productDocs: { ref: any; currentStock: number; id: string; name: string; qty: number }[] = [];
+      const productDocs: {
+        ref: any;
+        currentStock: number;
+        currentSizeStock: Record<number, number>;
+        newSizeStock: Record<number, number>;
+        newStock: number;
+        id: string;
+        name: string;
+        size: number;
+        qty: number;
+      }[] = [];
 
       for (const item of input.items) {
         const pRef = doc(db, 'products', item.productId);
@@ -785,15 +1055,29 @@ export async function createPosTransaction(input: PosTransactionInput): Promise<
         if (!pSnap.exists()) {
           throw new Error(`Produk "${item.name}" tidak ditemukan di database.`);
         }
-        const currentStock = Number(pSnap.data().stock) || 0;
-        if (currentStock < item.quantity) {
-          throw new Error(`Stok produk "${item.name}" tersisa ${currentStock} pasang, tidak cukup untuk pembelian ${item.quantity} pasang.`);
+        const pData = pSnap.data();
+        const currentTotal = Number(pData.stock) || 0;
+        const currentSizeStock = getProductSizeStock(pData as any);
+        const itemSize = Number(item.size);
+        const availableInSize = currentSizeStock[itemSize] !== undefined ? currentSizeStock[itemSize] : currentTotal;
+
+        if (availableInSize < item.quantity) {
+          throw new Error(`Stok produk "${item.name}" ukuran ${itemSize} tersisa ${availableInSize} pasang, tidak cukup untuk pembelian ${item.quantity} pasang.`);
         }
+
+        const newSizeStock = { ...currentSizeStock };
+        newSizeStock[itemSize] = Math.max(0, (newSizeStock[itemSize] || 0) - item.quantity);
+        const newStock = calculateTotalFromSizeStock(newSizeStock);
+
         productDocs.push({
           ref: pRef,
-          currentStock,
+          currentStock: currentTotal,
+          currentSizeStock,
+          newSizeStock,
+          newStock,
           id: item.productId,
           name: item.name,
+          size: itemSize,
           qty: item.quantity,
         });
       }
@@ -811,11 +1095,11 @@ export async function createPosTransaction(input: PosTransactionInput): Promise<
       // ALL WRITES BELOW (NO MORE READS PERMITTED)
       // ==========================================
 
-      // 3. Decrement stock for each product and record OUT mutation
+      // 3. Decrement sizeStock and total stock for each product and record OUT mutation
       for (const p of productDocs) {
-        const newStock = p.currentStock - p.qty;
         transaction.update(p.ref, {
-          stock: newStock,
+          sizeStock: p.newSizeStock,
+          stock: p.newStock,
           updatedAt: now,
         });
 
@@ -824,11 +1108,13 @@ export async function createPosTransaction(input: PosTransactionInput): Promise<
           id: mutationRef.id,
           productId: p.id,
           productName: p.name,
+          size: p.size,
+          orderNumber,
           type: 'OUT',
           quantity: p.qty,
-          notes: `Transaksi Kasir POS #${orderNumber} (${customerName})`,
+          notes: `Transaksi Kasir POS #${orderNumber} (Ukuran ${p.size} x${p.qty}) - ${customerName}`,
           previousStock: p.currentStock,
-          newStock,
+          newStock: p.newStock,
           timestamp: now,
           actor: input.cashierName || 'Kasir POS Mochi Steps',
         });

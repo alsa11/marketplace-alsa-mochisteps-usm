@@ -15,6 +15,7 @@ export interface Product {
   heelHeight: string;
   costPrice?: number; // Harga Beli / HPP Modal Produksi Sepatu (Rp)
   minStock?: number; // Batas Minimum Peringatan Stok Menipis (Default: 5)
+  sizeStock?: Record<number, number>; // Rincian stok per ukuran 36-41
   createdAt?: string;
   updatedAt?: string;
 }
@@ -86,6 +87,9 @@ export interface Order {
   specialNotes?: string;
   courier: string;
   trackingNumber?: string; // Nomor Resi Pengiriman (J&T, SiCepat, dll)
+  paymentProofUrl?: string;
+  stockRestored?: boolean; // Idempotency flag: prevents multiple stock restorations
+  rejectionReason?: string; // Alasan penolakan pembayaran
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
@@ -124,6 +128,8 @@ export interface StockMutation {
   id: string;
   productId: string;
   productName: string;
+  size?: number; // Ukuran sepatu yang mengalami perubahan stok (36-41)
+  orderNumber?: string; // Nomor referensi pesanan
   type: StockMutationType;
   quantity: number;
   notes: string;

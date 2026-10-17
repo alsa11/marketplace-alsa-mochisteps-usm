@@ -13,9 +13,15 @@ import {
   Copy,
   Check,
   MessageCircle,
+  RefreshCw,
+  Upload,
+  Image as ImageIcon,
+  Eye,
 } from 'lucide-react';
 import { Order, OrderStatus } from '../types';
 import { FlatshoeImage } from './FlatshoeImage';
+import { cancelCustomerOrder, updateOrderPaymentProof } from '../lib/firestoreService';
+import { compressImageFile } from '../lib/imageUtils';
 
 interface OrderTrackingModalProps {
   isOpen: boolean;
@@ -36,12 +42,49 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const [matchedOrder, setMatchedOrder] = useState<Order | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedResi, setCopiedResi] = useState(false);
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [proofUploadSuccess, setProofUploadSuccess] = useState<string | null>(null);
+  const [previewProofModal, setPreviewProofModal] = useState<string | null>(null);
+
+  const handleUploadProof = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !matchedOrder) return;
+    try {
+      setIsUploadingProof(true);
+      setProofUploadSuccess(null);
+      const compressedDataUrl = await compressImageFile(file);
+      await updateOrderPaymentProof(matchedOrder.id, compressedDataUrl);
+      setMatchedOrder({
+        ...matchedOrder,
+        paymentProofUrl: compressedDataUrl,
+      });
+      setProofUploadSuccess('Bukti transfer berhasil diunggah! Tim Admin kami akan segera memverifikasinya.');
+      setTimeout(() => setProofUploadSuccess(null), 5000);
+    } catch (err: any) {
+      alert('Gagal mengunggah foto bukti: ' + (err?.message || 'Error'));
+    } finally {
+      setIsUploadingProof(false);
+    }
+  };
 
   useEffect(() => {
     if (initialSearch) {
       setOrderNumberInput(initialSearch);
     }
   }, [initialSearch]);
+
+  // Real-time synchronization: keep matchedOrder synced with live Firestore stream
+  useEffect(() => {
+    if (matchedOrder) {
+      const liveOrder = orders.find(
+        (o) => o.id === matchedOrder.id || o.orderNumber.toLowerCase() === matchedOrder.orderNumber.toLowerCase()
+      );
+      if (liveOrder) {
+        setMatchedOrder(liveOrder);
+      }
+    }
+  }, [orders, matchedOrder?.id, matchedOrder?.orderNumber]);
 
   if (!isOpen) return null;
 
@@ -252,8 +295,18 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               <span className="text-xs font-bold text-gray-700 block">Alur Status Live Pesanan:</span>
               
               {matchedOrder.orderStatus === 'Dibatalkan' || matchedOrder.orderStatus === 'Ditolak' ? (
-                <div className="p-3 bg-red-50 text-red-800 rounded-xl text-xs font-bold text-center">
-                  ⚠️ Pesanan Ini Telah Dibatalkan / Ditolak. Hubungi Customer Service jika ada kekeliruan.
+                <div className="p-4 bg-red-50 text-red-900 rounded-2xl border border-red-200 text-xs space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-red-800">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>Status Pesanan: {matchedOrder.orderStatus}</span>
+                  </div>
+                  <p className="text-red-700 text-xs">
+                    <span className="font-semibold">Alasan:</span>{' '}
+                    <span>{matchedOrder.rejectionReason || 'Dibatalkan / Pembayaran tidak terkonfirmasi'}</span>
+                  </p>
+                  <p className="text-[10px] text-gray-500 pt-1">
+                    Stok sepatu telah otomatis dipulihkan ke stok toko. Anda dapat melakukan pemesanan ulang kapan saja.
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-6 gap-1 text-center">
@@ -401,6 +454,151 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               </div>
             </div>
 
+            {/* BUKTI PEMBAYARAN PELANGGAN (UNTUK TRANSFER BANK & QRIS) */}
+            {!matchedOrder.paymentMethod.includes('COD') && (
+              <div className="p-4 bg-white rounded-2xl border border-pink-200 shadow-2xs space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-800 flex items-center gap-1.5">
+                    <Upload className="w-4 h-4 text-[#be185d]" />
+                    <span>Bukti Pembayaran / Slip Transfer:</span>
+                  </span>
+                  {matchedOrder.paymentProofUrl ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      ✓ Sudah Diunggah
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                      Belum Ada Bukti
+                    </span>
+                  )}
+                </div>
+
+                {proofUploadSuccess && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold flex items-center gap-1.5 animate-fade-in">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{proofUploadSuccess}</span>
+                  </div>
+                )}
+
+                {matchedOrder.paymentProofUrl ? (
+                  <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-lg overflow-hidden bg-white border border-pink-200 shrink-0 shadow-2xs">
+                        <img
+                          src={matchedOrder.paymentProofUrl}
+                          alt="Bukti Transfer"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">Foto Bukti Transfer Asli</p>
+                        <p className="text-[10px] text-gray-500">Tersimpan aman & telah diterima tim Admin Mochi Steps</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewProofModal(matchedOrder.paymentProofUrl || null)}
+                        className="px-3 py-1.5 rounded-xl bg-pink-50 hover:bg-pink-100 text-[#be185d] font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer border border-pink-200"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Lihat Foto</span>
+                      </button>
+
+                      {matchedOrder.paymentStatus !== 'Lunas' && matchedOrder.orderStatus !== 'Ditolak' && matchedOrder.orderStatus !== 'Dibatalkan' && (
+                        <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-gray-50 text-gray-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer border border-gray-200 shadow-2xs">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleUploadProof}
+                            disabled={isUploadingProof}
+                            className="hidden"
+                          />
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{isUploadingProof ? 'Mengunggah...' : 'Ganti Foto'}</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/80 space-y-2">
+                    <p className="text-[11px] text-amber-900 font-medium leading-relaxed">
+                      Bukti pembayaran belum tersedia untuk pesanan ini. Jika Anda sudah melakukan pembayaran via transfer bank atau QRIS, silakan unggah foto struk agar pesanan segera diverifikasi.
+                    </p>
+
+                    {matchedOrder.paymentStatus !== 'Lunas' && matchedOrder.orderStatus !== 'Ditolak' && matchedOrder.orderStatus !== 'Dibatalkan' && (
+                      <label className="w-full py-2.5 px-4 rounded-xl bg-[#be185d] hover:bg-[#a2134e] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-2xs transition-all">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleUploadProof}
+                          disabled={isUploadingProof}
+                          className="hidden"
+                        />
+                        {isUploadingProof ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Sedang Mengunggah Foto Bukti...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Unggah Bukti Transfer Sekarang (JPG/PNG)</span>
+                          </>
+                        )}
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Self Cancellation for Unpaid Orders with Automatic Stock Restoration */}
+            {matchedOrder.paymentStatus !== 'Lunas' &&
+              matchedOrder.orderStatus !== 'Dibatalkan' &&
+              matchedOrder.orderStatus !== 'Ditolak' && (
+                <div className="p-4 bg-amber-50/90 rounded-2xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="font-bold text-amber-900 block">Ingin Membatalkan Pesanan Ini?</span>
+                    <span className="text-[11px] text-amber-700">
+                      Anda dapat membatalkan pesanan ini sebelum diverifikasi. Stok sepatu akan langsung dipulihkan ke etalase toko secara otomatis.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isCancellingOrder}
+                    onClick={async () => {
+                      if (
+                        confirm(
+                          `Apakah Anda yakin ingin membatalkan pesanan #${matchedOrder.orderNumber}? Stok ukuran sepatu akan otomatis dipulihkan ke sistem.`
+                        )
+                      ) {
+                        setIsCancellingOrder(true);
+                        try {
+                          await cancelCustomerOrder(matchedOrder, 'Dibatalkan oleh Pelanggan Mandiri di Halaman Lacak');
+                          alert('Pesanan berhasil dibatalkan dan stok telah otomatis dipulihkan ke etalase toko!');
+                        } catch (err: any) {
+                          alert('Gagal membatalkan pesanan: ' + (err?.message || 'Error'));
+                        } finally {
+                          setIsCancellingOrder(false);
+                        }
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-red-50 text-red-600 hover:text-red-700 font-bold border border-red-200 text-xs transition-colors cursor-pointer shrink-0 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isCancellingOrder ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Memulihkan Stok...</span>
+                      </>
+                    ) : (
+                      <span>Batalkan Pesanan Ini</span>
+                    )}
+                  </button>
+                </div>
+              )}
+
             {/* Direct WhatsApp Contact Button */}
             <div className="flex justify-end gap-2 pt-2">
               <a
@@ -414,6 +612,40 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 <MessageCircle className="w-4 h-4" />
                 <span>Hubungi CS WhatsApp Toko</span>
               </a>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Zoom Bukti Pembayaran Pelanggan */}
+        {previewProofModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+            <div className="relative w-full max-w-md bg-white rounded-3xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-pink-100 pb-2">
+                <h3 className="font-bold text-sm text-gray-900">Bukti Transfer Pembayaran</h3>
+                <button
+                  type="button"
+                  onClick={() => setPreviewProofModal(null)}
+                  className="p-1 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="rounded-2xl overflow-hidden bg-gray-50 border border-gray-200 flex items-center justify-center p-2 min-h-[220px]">
+                <img
+                  src={previewProofModal}
+                  alt="Bukti Transfer Pelanggan"
+                  className="max-h-[60vh] w-auto max-w-full rounded-xl object-contain shadow-xs"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreviewProofModal(null)}
+                className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs cursor-pointer"
+              >
+                Tutup Pratinjau
+              </button>
             </div>
           </div>
         )}

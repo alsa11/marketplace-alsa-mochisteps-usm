@@ -17,9 +17,13 @@ import {
   Navigation,
   FileText,
   BadgeCheck,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 import { CartItem, PaymentMethod } from '../types';
 import { createCustomerOrder } from '../lib/firestoreService';
+import { compressImageFile } from '../lib/imageUtils';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -55,6 +59,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [copiedAmount, setCopiedAmount] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [paymentProofUrl, setPaymentProofUrl] = useState<string>('');
+  const [isUploadingProof, setIsUploadingProof] = useState<boolean>(false);
+  const [proofFileName, setProofFileName] = useState<string>('');
+
+  const handleProofFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingProof(true);
+      setErrorMessage('');
+      const compressed = await compressImageFile(file);
+      setPaymentProofUrl(compressed);
+      setProofFileName(file.name);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Gagal memproses file bukti pembayaran.');
+    } finally {
+      setIsUploadingProof(false);
+    }
+  };
 
   const formatRupiah = (num: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -265,6 +288,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         subtotal,
         shippingCost,
         totalAmount,
+        paymentProofUrl: paymentProofUrl || undefined,
       };
 
       const docId = await createCustomerOrder(orderData);
@@ -847,6 +871,81 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* UPLOAD BUKTI PEMBAYARAN (TRANSFER BANK & QRIS) */}
+            {(paymentType === 'bank' || paymentType === 'qris') && (
+              <div className="p-4 rounded-2xl bg-white border border-pink-200 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                  <label className="font-bold text-gray-900 flex items-center gap-1.5">
+                    <Upload className="w-4 h-4 text-[#be185d]" />
+                    <span>Unggah Bukti Transfer / Struk Pembayaran:</span>
+                  </label>
+                  <span className="text-[10px] text-gray-500 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100 w-fit">
+                    Opsional (bisa diunggah saat ini atau via Lacak Pesanan)
+                  </span>
+                </div>
+
+                {paymentProofUrl ? (
+                  <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border border-emerald-300 shrink-0">
+                        <img
+                          src={paymentProofUrl}
+                          alt="Bukti Transfer"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="text-xs">
+                        <p className="font-bold text-emerald-900 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Foto Bukti Berhasil Dipilih</span>
+                        </p>
+                        <p className="text-[11px] text-emerald-700 truncate max-w-[200px] sm:max-w-xs font-mono">
+                          {proofFileName || 'bukti_transfer.jpg'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentProofUrl('');
+                        setProofFileName('');
+                      }}
+                      className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer"
+                      title="Hapus foto bukti"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-pink-200 hover:border-pink-400 bg-pink-50/30 hover:bg-pink-50/60 transition-all rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer text-center">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProofFileChange}
+                      disabled={isUploadingProof}
+                      className="hidden"
+                    />
+                    <div className="w-9 h-9 rounded-full bg-pink-100 text-[#be185d] flex items-center justify-center">
+                      {isUploadingProof ? (
+                        <span className="animate-spin text-xs">⌛</span>
+                      ) : (
+                        <ImageIcon className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-800">
+                        {isUploadingProof ? 'Sedang memproses foto...' : 'Klik untuk Pilih Foto Struk / Screenshot Bukti Transfer'}
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        Mendukung file gambar JPG, PNG, WEBP (Tersimpan aman & permanen)
+                      </p>
+                    </div>
+                  </label>
+                )}
               </div>
             )}
 

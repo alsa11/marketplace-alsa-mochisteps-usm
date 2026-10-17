@@ -51,15 +51,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       },
     },
     {
-      id: 'kategori',
-      label: 'Kategori',
-      icon: Grid,
-      onClick: () => {
-        onNavigateKategori();
-        setMobileMenuOpen(false);
-      },
-    },
-    {
       id: 'katalog',
       label: 'Katalog',
       icon: BookOpen,
