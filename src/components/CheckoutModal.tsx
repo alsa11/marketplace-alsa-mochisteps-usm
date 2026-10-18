@@ -20,8 +20,10 @@ import {
   Upload,
   Image as ImageIcon,
   Trash2,
+  Tag,
+  CheckCircle2,
 } from 'lucide-react';
-import { CartItem, PaymentMethod } from '../types';
+import { CartItem, PaymentMethod, Voucher, StoreSettings } from '../types';
 import { createCustomerOrder } from '../lib/firestoreService';
 import { compressImageFile } from '../lib/imageUtils';
 
@@ -30,6 +32,8 @@ interface CheckoutModalProps {
   onClose: () => void;
   items: CartItem[];
   onOrderSuccess: (orderId: string, orderNumber: string) => void;
+  vouchers?: Voucher[];
+  storeSettings?: StoreSettings;
 }
 
 type BankKey = 'BCA' | 'Mandiri' | 'BRI' | 'BNI' | 'BSI' | 'CIMB' | 'Permata';
@@ -39,6 +43,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onClose,
   items,
   onOrderSuccess,
+  vouchers = [],
+  storeSettings,
 }) => {
   if (!isOpen) return null;
 
@@ -87,12 +93,88 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }).format(num);
   };
 
+  // Voucher State
+  const [voucherCodeInput, setVoucherCodeInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
+  const [voucherMessage, setVoucherMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
   const subtotal = items.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
     0
   );
-  const shippingCost = 0; // Promo Gratis Ongkir Seluruh Indonesia
-  const totalAmount = subtotal + shippingCost;
+
+  const shippingCost = React.useMemo(() => {
+    if (!storeSettings) return 0;
+    if (subtotal >= (storeSettings.freeShippingThreshold || 350000)) return 0;
+    return storeSettings.defaultShippingCost ?? 0;
+  }, [storeSettings, subtotal]);
+
+  const discountAmount = React.useMemo(() => {
+    if (!appliedVoucher) return 0;
+    if (subtotal < (appliedVoucher.minSpend || 0)) return 0;
+    if (appliedVoucher.discountType === 'percentage') {
+      const calc = (subtotal * appliedVoucher.discountValue) / 100;
+      return Math.min(appliedVoucher.maxDiscount || Infinity, calc);
+    }
+    return appliedVoucher.discountValue;
+  }, [appliedVoucher, subtotal]);
+
+  const totalAmount = Math.max(0, subtotal - discountAmount + shippingCost);
+
+  const handleApplyVoucher = () => {
+    setVoucherMessage(null);
+    const code = voucherCodeInput.trim().toUpperCase();
+    if (!code) {
+      setVoucherMessage({ text: 'Masukkan kode voucher terlebih dahulu.', type: 'error' });
+      return;
+    }
+
+    const found = vouchers.find((v) => v.code.toUpperCase() === code);
+    if (!found) {
+      setVoucherMessage({ text: 'Kode voucher tidak ditemukan atau salah ketik.', type: 'error' });
+      return;
+    }
+
+    if (!found.isActive) {
+      setVoucherMessage({ text: 'Voucher sedang tidak aktif saat ini.', type: 'error' });
+      return;
+    }
+
+    if (found.validUntil && new Date(found.validUntil) < new Date(new Date().toDateString())) {
+      setVoucherMessage({ text: 'Voucher telah kedaluwarsa.', type: 'error' });
+      return;
+    }
+
+    if (found.usageLimit && found.usageCount >= found.usageLimit) {
+      setVoucherMessage({ text: 'Kuota penggunaan voucher ini telah habis.', type: 'error' });
+      return;
+    }
+
+    if (found.minSpend && subtotal < found.minSpend) {
+      setVoucherMessage({
+        text: `Minimal belanja ${formatRupiah(found.minSpend)} untuk voucher ini.`,
+        type: 'error',
+      });
+      return;
+    }
+
+    setAppliedVoucher(found);
+    const calcDisc =
+      found.discountType === 'percentage'
+        ? Math.min(found.maxDiscount || Infinity, (subtotal * found.discountValue) / 100)
+        : found.discountValue;
+
+    setVoucherMessage({
+      text: `Voucher ${found.code} berhasil diterapkan! Hemat ${formatRupiah(calcDisc)}`,
+      type: 'success',
+    });
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherCodeInput('');
+    setVoucherMessage(null);
+  };
 
   // Complete List of Supported Bank Accounts & Virtual Accounts (VA)
   const bankAccounts: Record<
@@ -287,6 +369,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         })),
         subtotal,
         shippingCost,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined,
+        voucherCode: appliedVoucher ? appliedVoucher.code : undefined,
         totalAmount,
         paymentProofUrl: paymentProofUrl || undefined,
       };
@@ -963,16 +1047,86 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             )}
           </div>
 
+          {/* ================= 5. VOUCHER & PROMOSI ================= */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+              <Tag className="w-4 h-4 text-[#be185d]" />
+              <span>Kode Voucher Diskon (Opsional)</span>
+            </label>
+
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Contoh: MOCHICERIA / STEPS20K"
+                  value={voucherCodeInput}
+                  disabled={!!appliedVoucher}
+                  onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                  className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-white text-xs font-mono font-semibold focus:outline-hidden focus:ring-2 focus:ring-pink-300 uppercase disabled:bg-gray-100 disabled:text-gray-500"
+                />
+              </div>
+
+              {appliedVoucher ? (
+                <button
+                  type="button"
+                  onClick={handleRemoveVoucher}
+                  className="px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs border border-red-200 transition-colors cursor-pointer"
+                >
+                  Hapus
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleApplyVoucher}
+                  className="px-5 py-2.5 rounded-xl bg-[#be185d] hover:bg-[#9d174d] text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                >
+                  Gunakan
+                </button>
+              )}
+            </div>
+
+            {voucherMessage && (
+              <div
+                className={`p-2.5 rounded-xl text-xs font-medium flex items-center gap-2 animate-fade-in ${
+                  voucherMessage.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}
+              >
+                {voucherMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                )}
+                <span>{voucherMessage.text}</span>
+              </div>
+            )}
+          </div>
+
           {/* RINGKASAN BELANJA & TOMBOL BUAT PESANAN */}
           <div className="bg-[#fff2f5] p-5 rounded-2xl border border-pink-200 space-y-3">
             <div className="flex items-center justify-between text-xs text-gray-600">
               <span>Subtotal ({items.reduce((s, it) => s + it.quantity, 0)} pasang sepatu):</span>
-              <span className="font-semibold text-gray-900">{formatRupiah(subtotal)}</span>
+              <span className="font-semibold text-gray-900 font-mono">{formatRupiah(subtotal)}</span>
             </div>
+
+            {appliedVoucher && discountAmount > 0 && (
+              <div className="flex items-center justify-between text-xs text-emerald-700 font-semibold bg-emerald-50/70 p-2 rounded-xl border border-emerald-200/60">
+                <span className="flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Diskon Voucher ({appliedVoucher.code}):</span>
+                </span>
+                <span className="font-mono font-bold">-{formatRupiah(discountAmount)}</span>
+              </div>
+            )}
+
             <div className="flex items-center justify-between text-xs text-gray-600">
               <span>Ongkos Kirim ({courier.split(' ')[0]}):</span>
-              <span className="font-bold text-emerald-600">GRATIS</span>
+              <span className="font-bold text-emerald-600 font-mono">
+                {shippingCost === 0 ? 'GRATIS' : formatRupiah(shippingCost)}
+              </span>
             </div>
+
             <div className="pt-2 border-t border-pink-200 flex items-center justify-between">
               <div>
                 <span className="text-xs text-gray-500 block">Total Pembayaran:</span>

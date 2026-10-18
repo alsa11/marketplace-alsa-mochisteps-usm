@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { ShoppingBag, Star, Eye, Check } from 'lucide-react';
+import { ShoppingBag, Star, Eye, Check, Heart } from 'lucide-react';
 import { Product } from '../types';
 import { FlatshoeImage } from './FlatshoeImage';
 
@@ -8,12 +8,16 @@ interface ProductCardProps {
   product: Product;
   onAddToCart: (product: Product, size: number) => void;
   onOpenDetail: (product: Product) => void;
+  isWishlisted?: boolean;
+  onToggleWishlist?: (productId: string) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onAddToCart,
   onOpenDetail,
+  isWishlisted = false,
+  onToggleWishlist,
 }) => {
   const [selectedSize, setSelectedSize] = useState<number>(38);
   const [isAdded, setIsAdded] = useState(false);
@@ -70,6 +74,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </span>
           )}
         </div>
+
+        {/* Wishlist Heart Button in Top Right */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleWishlist?.(product.id);
+          }}
+          className="absolute top-3 right-3 p-2 rounded-full bg-white/90 hover:bg-white text-gray-400 hover:text-[#be185d] shadow-sm z-10 transition-transform active:scale-90 cursor-pointer"
+          title={isWishlisted ? 'Hapus dari Wishlist' : 'Simpan ke Wishlist'}
+        >
+          <Heart className={`w-4 h-4 transition-colors ${isWishlisted ? 'fill-[#be185d] text-[#be185d]' : 'text-gray-400'}`} />
+        </button>
 
         {/* Quick View Overlay Button */}
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">

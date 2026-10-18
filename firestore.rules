@@ -53,5 +53,29 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Store Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Vouchers & Promotions
+    match /vouchers/{voucherId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Customer Reviews
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Returns & Size Exchange Requests
+    match /returns/{returnId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

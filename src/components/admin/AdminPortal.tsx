@@ -36,6 +36,11 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   Sliders,
+  Tag,
+  MessageSquare,
+  RotateCcw,
+  Settings,
+  Store,
 } from 'lucide-react';
 import {
   Order,
@@ -44,6 +49,10 @@ import {
   CustomerSummary,
   OrderStatus,
   PaymentStatus,
+  StoreSettings,
+  Voucher,
+  ProductReview,
+  OrderReturn,
 } from '../../types';
 import {
   approvePayment,
@@ -66,6 +75,11 @@ import { FlatshoeImage } from '../FlatshoeImage';
 import { PosKasir } from './PosKasir';
 import { PricingProfitManager } from './PricingProfitManager';
 import { InventoryStockManager } from './InventoryStockManager';
+import { AdminProfileModal } from './AdminProfileModal';
+import { StoreSettingsManager } from './StoreSettingsManager';
+import { VoucherManager } from './VoucherManager';
+import { ReviewManager } from './ReviewManager';
+import { ReturnManager } from './ReturnManager';
 
 interface AdminPortalProps {
   adminEmail: string;
@@ -74,6 +88,10 @@ interface AdminPortalProps {
   orders: Order[];
   mutations: StockMutation[];
   isFirestoreConnected: boolean;
+  storeSettings?: StoreSettings;
+  vouchers?: Voucher[];
+  reviews?: ProductReview[];
+  returns?: OrderReturn[];
 }
 
 export type AdminTab =
@@ -84,7 +102,11 @@ export type AdminTab =
   | 'approval'
   | 'sales'
   | 'inventory'
-  | 'pricing';
+  | 'pricing'
+  | 'vouchers'
+  | 'reviews'
+  | 'returns'
+  | 'settings';
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   adminEmail,
@@ -93,6 +115,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   orders,
   mutations,
   isFirestoreConnected,
+  storeSettings,
+  vouchers = [],
+  reviews = [],
+  returns = [],
 }) => {
   // Navigation State - Default to Dashboard
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
@@ -133,6 +159,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setApprovalToast({ message, type });
     setTimeout(() => setApprovalToast(null), 4000);
   };
+
+  // Admin Profile Modal State
+  const [isAdminProfileOpen, setIsAdminProfileOpen] = useState<boolean>(false);
 
   // Product Edit Modal State
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -576,6 +605,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     { id: 'sales', label: '6. Laporan Sales', icon: TrendingUp },
     { id: 'inventory', label: '7. Inventory & Stok', icon: Boxes, count: mutations.length },
     { id: 'pricing', label: '8. Pengaturan Harga & Profit', icon: DollarSign, tag: 'Formula' },
+    { id: 'vouchers', label: '9. Voucher Promo', icon: Tag, count: vouchers.length },
+    {
+      id: 'reviews',
+      label: '10. Moderasi Ulasan',
+      icon: MessageSquare,
+      count: reviews.filter((r) => !r.isApproved).length || undefined,
+      badgeColor: 'bg-amber-500 text-white',
+    },
+    {
+      id: 'returns',
+      label: '11. Retur & Tukar Size',
+      icon: RotateCcw,
+      count: returns.filter((r) => r.status === 'Menunggu Pemeriksaan').length || undefined,
+      badgeColor: 'bg-amber-500 text-white',
+    },
+    { id: 'settings', label: '12. Pengaturan Toko', icon: Store },
   ];
 
   return (
@@ -636,10 +681,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <span>🌸 Webstore</span>
               </button>
 
-              <div className="text-right hidden lg:block">
-                <p className="text-xs font-bold text-gray-800 truncate max-w-[140px]">{adminEmail}</p>
-                <p className="text-[10px] text-pink-600 font-medium">Administrator</p>
-              </div>
+              {/* Admin Profile Trigger Button (Avatar + Name) */}
+              <button
+                type="button"
+                onClick={() => setIsAdminProfileOpen(true)}
+                className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-2xl hover:bg-pink-50 border border-transparent hover:border-pink-200 transition-all cursor-pointer group text-left"
+                title="Klik untuk melihat & mengedit profil administrator"
+              >
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden border border-pink-300 bg-pink-100 shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <img
+                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"
+                    alt="Foto Profil Admin"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="hidden sm:block text-left">
+                  <p className="text-xs font-bold text-gray-800 truncate max-w-[130px] group-hover:text-[#be185d] transition-colors">
+                    {adminEmail === 'kirakirani57@gmail.com' ? 'Kirani Admin' : (adminEmail.split('@')[0] || 'Admin Mochi')}
+                  </p>
+                  <p className="text-[10px] text-pink-600 font-semibold flex items-center gap-1">
+                    <span>Super Admin</span>
+                    <span className="text-[9px] bg-pink-100 text-pink-700 px-1 rounded-sm">Lihat Profil</span>
+                  </p>
+                </div>
+              </button>
 
               {/* Logout Button */}
               <button
@@ -1941,6 +2006,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
         {/* ================= 8. PENGATURAN HARGA & PROFIT ================= */}
         {activeTab === 'pricing' && <PricingProfitManager products={products} />}
+
+        {/* ================= 9. VOUCHER & PROMOSI ================= */}
+        {activeTab === 'vouchers' && (
+          <VoucherManager
+            vouchers={vouchers}
+            onShowToast={showApprovalToast}
+          />
+        )}
+
+        {/* ================= 10. MODERASI ULASAN ================= */}
+        {activeTab === 'reviews' && (
+          <ReviewManager
+            reviews={reviews}
+            onShowToast={showApprovalToast}
+          />
+        )}
+
+        {/* ================= 11. RETUR & TUKAR UKURAN ================= */}
+        {activeTab === 'returns' && (
+          <ReturnManager
+            returns={returns}
+            onShowToast={showApprovalToast}
+          />
+        )}
+
+        {/* ================= 12. PENGATURAN TOKO ================= */}
+        {activeTab === 'settings' && (
+          <StoreSettingsManager
+            settings={storeSettings}
+            onShowToast={showApprovalToast}
+          />
+        )}
       </main>
 
       {/* ================= MODAL: DETAIL PESANAN & CETAK STRUK ================= */}
@@ -2765,6 +2862,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
       )}
+
+      {/* ================= MODAL: PROFIL ADMINISTRATOR ================= */}
+      <AdminProfileModal
+        isOpen={isAdminProfileOpen}
+        onClose={() => setIsAdminProfileOpen(false)}
+        adminEmail={adminEmail}
+        onLogout={onLogout}
+      />
 
       {/* ================= FLOATING TOAST NOTIFICATION ================= */}
       {approvalToast && (

@@ -8,8 +8,22 @@ import {
   subscribeToProducts,
   subscribeToOrders,
   subscribeToStockMutations,
+  subscribeToStoreSettings,
+  subscribeToVouchers,
+  subscribeToReviews,
+  subscribeToReturns,
+  DEFAULT_STORE_SETTINGS,
 } from './lib/firestoreService';
-import { Product, CartItem, Order, StockMutation } from './types';
+import {
+  Product,
+  CartItem,
+  Order,
+  StockMutation,
+  StoreSettings,
+  Voucher,
+  ProductReview,
+  OrderReturn,
+} from './types';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { ProductCard } from './components/ProductCard';
@@ -19,6 +33,7 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { OrderSuccessModal } from './components/OrderSuccessModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { InsoleGuideModal } from './components/InsoleGuideModal';
+import { WishlistDrawer } from './components/WishlistDrawer';
 import { Footer } from './components/Footer';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
@@ -29,9 +44,58 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [mutations, setMutations] = useState<StockMutation[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [returns, setReturns] = useState<OrderReturn[]>([]);
+
+  // Cart with localStorage persistence
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('mochi_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Wishlist with localStorage persistence
+  const [wishlistIds, setWishlistIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('mochi_wishlist');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isWishlistOpen, setIsWishlistOpen] = useState<boolean>(false);
+
   const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(true);
   const [isLoadingInitial, setIsLoadingInitial] = useState<boolean>(true);
+
+  // Sync cart to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('mochi_cart', JSON.stringify(cart));
+    } catch (e) {
+      console.warn('Could not save cart to localStorage', e);
+    }
+  }, [cart]);
+
+  // Sync wishlist to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('mochi_wishlist', JSON.stringify(wishlistIds));
+    } catch (e) {
+      console.warn('Could not save wishlist to localStorage', e);
+    }
+  }, [wishlistIds]);
+
+  const handleToggleWishlist = (productId: string) => {
+    setWishlistIds((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+  };
 
   // Modals & Navigation
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -98,6 +162,22 @@ export default function App() {
       setMutations(muts);
     });
 
+    const unsubscribeStoreSettings = subscribeToStoreSettings((settings) => {
+      setStoreSettings(settings);
+    });
+
+    const unsubscribeVouchers = subscribeToVouchers((vouchs) => {
+      setVouchers(vouchs);
+    });
+
+    const unsubscribeReviews = subscribeToReviews((revs) => {
+      setReviews(revs);
+    });
+
+    const unsubscribeReturns = subscribeToReturns((rets) => {
+      setReturns(rets);
+    });
+
     // 2. Perform seed check and connectivity test asynchronously without blocking the real-time stream
     seedProductsIfEmpty().catch((err) => console.warn('Product seeding note:', err));
     testFirestoreConnection().then(setIsFirestoreConnected).catch(() => {});
@@ -106,6 +186,10 @@ export default function App() {
       if (unsubscribeProducts) unsubscribeProducts();
       if (unsubscribeOrders) unsubscribeOrders();
       if (unsubscribeMutations) unsubscribeMutations();
+      if (unsubscribeStoreSettings) unsubscribeStoreSettings();
+      if (unsubscribeVouchers) unsubscribeVouchers();
+      if (unsubscribeReviews) unsubscribeReviews();
+      if (unsubscribeReturns) unsubscribeReturns();
     };
   }, []);
 
@@ -192,6 +276,10 @@ export default function App() {
         orders={orders}
         mutations={mutations}
         isFirestoreConnected={isFirestoreConnected}
+        storeSettings={storeSettings}
+        vouchers={vouchers}
+        reviews={reviews}
+        returns={returns}
       />
     );
   }
@@ -202,7 +290,9 @@ export default function App() {
       {/* Navbar */}
       <Navbar
         cartCount={totalCartCount}
+        wishlistCount={wishlistIds.length}
         onOpenCart={() => setIsCartOpen(true)}
+        onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenInsoleGuide={() => setIsInsoleGuideOpen(true)}
         onOpenOrderTracking={() => setIsOrderTrackingOpen(true)}
         onLogoAdminTrigger={() => setIsAdminLoginModalOpen(true)}
@@ -213,6 +303,7 @@ export default function App() {
         }}
         onNavigateKatalog={() => scrollToProducts()}
         isFirestoreConnected={isFirestoreConnected}
+        storeSettings={storeSettings}
       />
 
       {/* Hero Section with Framer Motion */}
@@ -381,6 +472,8 @@ export default function App() {
                 product={product}
                 onAddToCart={(p, size) => handleAddToCart(p, size, 1)}
                 onOpenDetail={(p) => setActiveProductDetail(p)}
+                isWishlisted={wishlistIds.includes(product.id)}
+                onToggleWishlist={handleToggleWishlist}
               />
             ))}
           </div>
@@ -411,9 +504,10 @@ export default function App() {
           scrollToProducts();
         }}
         onSecretAdminClick={() => setIsAdminLoginModalOpen(true)}
+        storeSettings={storeSettings}
       />
 
-      {/* Product Detail Modal */}
+      {/* Product Detail Modal with Reviews and Wishlist */}
       <ProductDetailModal
         product={activeProductDetail}
         onClose={() => setActiveProductDetail(null)}
@@ -422,6 +516,23 @@ export default function App() {
         onOpenInsoleGuide={() => {
           setActiveProductDetail(null);
           setIsInsoleGuideOpen(true);
+        }}
+        isWishlisted={activeProductDetail ? wishlistIds.includes(activeProductDetail.id) : false}
+        onToggleWishlist={handleToggleWishlist}
+        reviews={reviews}
+      />
+
+      {/* Wishlist Drawer */}
+      <WishlistDrawer
+        isOpen={isWishlistOpen}
+        onClose={() => setIsWishlistOpen(false)}
+        wishlistIds={wishlistIds}
+        products={products}
+        onRemoveFromWishlist={(id) => handleToggleWishlist(id)}
+        onAddToCart={(p, size) => handleAddToCart(p, size, 1)}
+        onViewProduct={(p) => {
+          setIsWishlistOpen(false);
+          setActiveProductDetail(p);
         }}
       />
 
@@ -438,7 +549,7 @@ export default function App() {
         }}
       />
 
-      {/* Checkout Modal */}
+      {/* Checkout Modal with Vouchers and Store Settings */}
       <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
@@ -449,6 +560,8 @@ export default function App() {
           setCompletedOrderNumber(orderNum);
           setIsSuccessModalOpen(true);
         }}
+        vouchers={vouchers}
+        storeSettings={storeSettings}
       />
 
       {/* Order Success Modal */}

@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { ShoppingBag, ShieldCheck, Menu, X, Truck, Sparkles, Home, Grid, BookOpen } from 'lucide-react';
+import { ShoppingBag, ShieldCheck, Menu, X, Truck, Sparkles, Home, Grid, BookOpen, Heart } from 'lucide-react';
 import { MochiLogo } from './MochiLogo';
+import { StoreSettings } from '../types';
 
 interface NavbarProps {
   cartCount: number;
+  wishlistCount?: number;
   onOpenCart: () => void;
+  onOpenWishlist?: () => void;
   onOpenInsoleGuide: () => void;
   onOpenOrderTracking: () => void;
   onLogoAdminTrigger: () => void;
@@ -12,11 +15,14 @@ interface NavbarProps {
   onNavigateKategori: () => void;
   onNavigateKatalog: () => void;
   isFirestoreConnected: boolean;
+  storeSettings?: StoreSettings;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   cartCount,
+  wishlistCount = 0,
   onOpenCart,
+  onOpenWishlist,
   onOpenInsoleGuide,
   onOpenOrderTracking,
   onLogoAdminTrigger,
@@ -24,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateKategori,
   onNavigateKatalog,
   isFirestoreConnected,
+  storeSettings,
 }) => {
   const [clickCount, setClickCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -77,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
           <span className="inline-block w-2 h-2 rounded-full bg-pink-500 animate-ping shrink-0" />
           <span className="font-medium text-[11px] sm:text-xs">
-            🌸 Busa Mochi 8mm — Sensasi Melangkah Empuk & Ringan Sepanjang Hari
+            {storeSettings?.announcementBanner || '🌸 Busa Mochi 8mm — Sensasi Melangkah Empuk & Ringan Sepanjang Hari'}
           </span>
         </div>
 
@@ -131,6 +138,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Pojok kanan: Icon Keranjang saja & Admin MochiSteps */}
           <div className="flex items-center gap-2 sm:gap-3">
             
+            {/* Icon Wishlist Favorit */}
+            <button
+              type="button"
+              onClick={onOpenWishlist}
+              className="relative p-2.5 rounded-full text-[#6b3d4a] hover:text-[#be185d] hover:bg-pink-50 transition-all cursor-pointer flex items-center justify-center border border-pink-100/60"
+              aria-label="Wishlist Sepatu"
+              title="Buka Wishlist Sepatu Favorit"
+            >
+              <Heart className="w-5 h-5 text-[#8d2a45]" />
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#be185d] text-white font-extrabold text-[11px] flex items-center justify-center shadow-xs">
+                  {wishlistCount}
+                </span>
+              )}
+            </button>
+
             {/* Icon Keranjang Saja */}
             <button
               type="button"

@@ -16,6 +16,7 @@ export interface Product {
   costPrice?: number; // Harga Beli / HPP Modal Produksi Sepatu (Rp)
   minStock?: number; // Batas Minimum Peringatan Stok Menipis (Default: 5)
   sizeStock?: Record<number, number>; // Rincian stok per ukuran 36-41
+  sku?: string; // Kode SKU Produk Sepatu
   createdAt?: string;
   updatedAt?: string;
 }
@@ -72,6 +73,13 @@ export type OrderStatus =
   | 'Disetujui'
   | 'Ditolak';
 
+export interface OrderStatusHistoryItem {
+  status: OrderStatus;
+  timestamp: string;
+  notes?: string;
+  actor?: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -87,21 +95,24 @@ export interface Order {
   specialNotes?: string;
   courier: string;
   trackingNumber?: string; // Nomor Resi Pengiriman (J&T, SiCepat, dll)
+  shippingDate?: string;
   paymentProofUrl?: string;
   stockRestored?: boolean; // Idempotency flag: prevents multiple stock restorations
   rejectionReason?: string; // Alasan penolakan pembayaran
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
+  statusHistory?: OrderStatusHistoryItem[];
   items: OrderItem[];
   subtotal: number;
   shippingCost: number;
+  discountAmount?: number;
+  voucherCode?: string;
   totalAmount: number;
   channel?: 'webstore' | 'pos';
   cashierName?: string;
   cashReceived?: number;
   cashChange?: number;
-  discountAmount?: number;
   receiptNumber?: string;
   createdAt: string;
   updatedAt: string;
@@ -161,4 +172,84 @@ export interface CustomerSummary {
   totalSpent: number;
   lastOrderDate: string;
   orders: Order[];
+}
+
+export interface BankAccountInfo {
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  instructions?: string;
+}
+
+export interface StoreSettings {
+  storeName: string;
+  tagline: string;
+  description: string;
+  logoUrl?: string;
+  announcementBanner: string;
+  isAnnouncementActive: boolean;
+  phone: string;
+  whatsappNumber: string;
+  email: string;
+  address: string;
+  city: string;
+  operationalHours: string;
+  defaultShippingCost: number;
+  freeShippingThreshold: number;
+  bankAccounts: BankAccountInfo[];
+  qrisImageUrl?: string;
+  termsAndConditions: string;
+  privacyPolicy: string;
+  returnPolicy: string;
+  sizeGuideNote: string;
+  updatedAt?: string;
+}
+
+export interface Voucher {
+  id: string;
+  code: string;
+  discountType: 'percentage' | 'nominal';
+  discountValue: number;
+  minSpend: number;
+  maxDiscount?: number;
+  validUntil: string;
+  usageLimit: number;
+  usageCount: number;
+  isActive: boolean;
+  description?: string;
+  createdAt?: string;
+}
+
+export interface ProductReview {
+  id: string;
+  productId: string;
+  productName: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  rating: number; // 1-5
+  comment: string;
+  photoUrl?: string;
+  size?: number;
+  isApproved: boolean;
+  createdAt: string;
+}
+
+export interface OrderReturn {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  items: OrderItem[];
+  reason: string;
+  photoUrl?: string;
+  returnType: 'Tukar Ukuran' | 'Pengembalian Dana (Refund)';
+  requestedSize?: number;
+  status: 'Menunggu Pemeriksaan' | 'Disetujui (Kirim Barang)' | 'Barang Diterima & Selesai' | 'Ditolak';
+  rejectionReason?: string;
+  stockRestored?: boolean;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -15,7 +15,19 @@ import {
   limit,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { Product, Order, StockMutation, OrderStatus, PaymentStatus, PaymentMethod } from '../types';
+import {
+  Product,
+  Order,
+  StockMutation,
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethod,
+  StoreSettings,
+  Voucher,
+  ProductReview,
+  OrderReturn,
+  OrderStatusHistoryItem,
+} from '../types';
 
 export const INITIAL_PRODUCTS: Omit<Product, 'id'>[] = [
   {
@@ -523,11 +535,19 @@ export async function createCustomerOrder(orderData: Omit<Order, 'id' | 'created
         }
       }
 
-      // 3. Write Order document with stockRestored: false
+      // 3. Write Order document with stockRestored: false and initial status history
+      const initialHistory: OrderStatusHistoryItem = {
+        status: orderData.orderStatus,
+        timestamp: now,
+        notes: `Pesanan dibuat via ${orderData.channel === 'pos' ? 'Kasir POS' : 'Webstore'} (${orderData.paymentMethod})`,
+        actor: orderData.channel === 'pos' ? (orderData.cashierName || 'Kasir') : 'Pelanggan',
+      };
+
       transaction.set(orderDocRef, {
         ...orderData,
         id: orderDocRef.id,
         stockRestored: false,
+        statusHistory: orderData.statusHistory?.length ? orderData.statusHistory : [initialHistory],
         createdAt: now,
         updatedAt: now,
       });
@@ -1336,25 +1356,40 @@ export async function recordStockOpname(params: {
   }
 }
 
-// Update Order Tracking Details & Status
+// Update Order Tracking Details & Status with Courier and Shipping Date
 export async function updateOrderTracking(
   orderId: string,
   trackingNumber: string,
-  status?: OrderStatus
+  courier?: string,
+  shippingDate?: string,
+  status?: OrderStatus,
+  actor: string = 'Admin Logistik'
 ): Promise<void> {
   const now = new Date().toISOString();
   const orderRef = doc(db, 'orders', orderId);
 
-  const updatePayload: Record<string, any> = {
-    trackingNumber: trackingNumber.trim(),
-    updatedAt: now,
-  };
-
-  if (status) {
-    updatePayload.orderStatus = status;
-  }
-
   try {
+    const snap = await getDoc(orderRef);
+    const orderData = snap.data() as Order | undefined;
+    const currentHistory = orderData?.statusHistory || [];
+
+    const newHistoryItem: OrderStatusHistoryItem = {
+      status: status || orderData?.orderStatus || 'Dikirim',
+      timestamp: now,
+      notes: `Resi ${trackingNumber.trim()}${courier ? ` via ${courier}` : ''}${shippingDate ? ` (${shippingDate})` : ''}`,
+      actor,
+    };
+
+    const updatePayload: Record<string, any> = {
+      trackingNumber: trackingNumber.trim(),
+      updatedAt: now,
+      statusHistory: [...currentHistory, newHistoryItem],
+    };
+
+    if (courier) updatePayload.courier = courier;
+    if (shippingDate) updatePayload.shippingDate = shippingDate;
+    if (status) updatePayload.orderStatus = status;
+
     await updateDoc(orderRef, updatePayload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}/tracking`);
@@ -1366,21 +1401,35 @@ export async function updateOrderTracking(
 export async function updateOrderCustomStatus(
   orderId: string,
   orderStatus: OrderStatus,
-  paymentStatus?: PaymentStatus
+  paymentStatus?: PaymentStatus,
+  notes?: string,
+  actor: string = 'Admin'
 ): Promise<void> {
   const now = new Date().toISOString();
   const orderRef = doc(db, 'orders', orderId);
 
-  const payload: Record<string, any> = {
-    orderStatus,
-    updatedAt: now,
-  };
-
-  if (paymentStatus) {
-    payload.paymentStatus = paymentStatus;
-  }
-
   try {
+    const snap = await getDoc(orderRef);
+    const orderData = snap.data() as Order | undefined;
+    const currentHistory = orderData?.statusHistory || [];
+
+    const newHistoryItem: OrderStatusHistoryItem = {
+      status: orderStatus,
+      timestamp: now,
+      notes: notes || `Status diubah menjadi ${orderStatus}`,
+      actor,
+    };
+
+    const payload: Record<string, any> = {
+      orderStatus,
+      updatedAt: now,
+      statusHistory: [...currentHistory, newHistoryItem],
+    };
+
+    if (paymentStatus) {
+      payload.paymentStatus = paymentStatus;
+    }
+
     await updateDoc(orderRef, payload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}/status`);
@@ -1404,4 +1453,368 @@ export async function updateProductMinStock(
     handleFirestoreError(error, OperationType.UPDATE, `products/${productId}/minStock`);
     throw error;
   }
+}
+
+// ==========================================
+// 1. PENGATURAN TOKO (STORE SETTINGS) LIVE SYNC
+// ==========================================
+export const DEFAULT_STORE_SETTINGS: StoreSettings = {
+  storeName: 'Mochi Steps',
+  tagline: 'Your Everyday Steps, Your Style',
+  description: 'Toko flatshoes wanita premium dengan bantalan CloudMochi 8mm selembut marshmallow. Nyaman melangkah seharian tanpa lecet.',
+  announcementBanner: '🌸 PROMO SPESIAL: Diskon s/d 20% & Garansi Bebas Tukar Ukuran 3 Hari! Gunakan voucher MOCHICERIA',
+  isAnnouncementActive: true,
+  phone: '081945673245',
+  whatsappNumber: '6281945673245',
+  email: 'halo@mochisteps.com',
+  address: 'Jl. Kemang Raya No. 42B, Mampang Prapatan',
+  city: 'Jakarta Selatan, DKI Jakarta 12730',
+  operationalHours: 'Senin - Minggu: 08.00 - 21.00 WIB',
+  defaultShippingCost: 15000,
+  freeShippingThreshold: 350000,
+  bankAccounts: [
+    {
+      bankName: 'Bank Central Asia (BCA)',
+      accountNumber: '8720-4912-33',
+      accountHolder: 'PT MOCHI STEPS INDONESIA',
+      instructions: 'Transfer tepat sesuai nominal tagihan hingga 3 digit terakhir untuk kemudahan verifikasi.',
+    },
+    {
+      bankName: 'Bank Mandiri',
+      accountNumber: '137-00-9821456-2',
+      accountHolder: 'PT MOCHI STEPS INDONESIA',
+      instructions: 'Cantumkan nomor pesanan Anda pada berita transfer bank.',
+    },
+    {
+      bankName: 'Bank BRI',
+      accountNumber: '0341-01-002348-50-9',
+      accountHolder: 'PT MOCHI STEPS INDONESIA',
+      instructions: 'Transfer dapat dilakukan via ATM, BRImo, atau teller cabang.',
+    },
+  ],
+  termsAndConditions: 'Semua produk Mochi Steps bergaransi keaslian 100%. Pesanan diproses setelah pembayaran terverifikasi oleh tim admin.',
+  privacyPolicy: 'Kami menghargai privasi Anda. Nomor telepon, alamat kirim, dan data pesanan Anda terenkripsi dan tidak akan dibagikan ke pihak ketiga.',
+  returnPolicy: 'Garansi tukar ukuran berlaku maksimal 3 hari sejak barang diterima kurir. Sepatu harus dalam kondisi belum dipakai ke luar rumah, sol bersih, dan dus lengkap.',
+  sizeGuideNote: 'Ukuran sepatu Mochi Steps adalah true-to-size standar EU 36-41. Bila punggung kaki gemuk atau lebar, sangat disarankan memilih 1 ukuran lebih besar.',
+};
+
+export function subscribeToStoreSettings(callback: (settings: StoreSettings) => void) {
+  const settingsDocRef = doc(db, 'settings', 'store');
+  return onSnapshot(
+    settingsDocRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback({ ...DEFAULT_STORE_SETTINGS, ...snapshot.data() } as StoreSettings);
+      } else {
+        setDoc(settingsDocRef, DEFAULT_STORE_SETTINGS).catch((e) => console.warn('Seed settings note:', e));
+        callback(DEFAULT_STORE_SETTINGS);
+      }
+    },
+    (error) => {
+      console.warn('Store settings subscription error, falling back to default:', error);
+      callback(DEFAULT_STORE_SETTINGS);
+    }
+  );
+}
+
+export async function updateStoreSettings(newSettings: Partial<StoreSettings>): Promise<void> {
+  const settingsDocRef = doc(db, 'settings', 'store');
+  const now = new Date().toISOString();
+  try {
+    await setDoc(settingsDocRef, { ...newSettings, updatedAt: now }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'settings/store');
+    throw error;
+  }
+}
+
+// ==========================================
+// 2. VOUCHER & PROMOSI (VOUCHERS & DISCOUNTS)
+// ==========================================
+export const DEFAULT_VOUCHERS: Omit<Voucher, 'id'>[] = [
+  {
+    code: 'MOCHICERIA',
+    discountType: 'percentage',
+    discountValue: 15,
+    minSpend: 150000,
+    maxDiscount: 35000,
+    validUntil: '2026-12-31',
+    usageLimit: 1000,
+    usageCount: 42,
+    isActive: true,
+    description: 'Diskon 15% Spesial Koleksi Flatshoes Mochi Steps (Min. Belanja Rp 150.000)',
+  },
+  {
+    code: 'STEPS20K',
+    discountType: 'nominal',
+    discountValue: 20000,
+    minSpend: 200000,
+    validUntil: '2026-12-31',
+    usageLimit: 500,
+    usageCount: 18,
+    isActive: true,
+    description: 'Potongan Langsung Rp 20.000 untuk Semua Model Sepatu',
+  },
+];
+
+export function subscribeToVouchers(callback: (vouchers: Voucher[]) => void) {
+  const vouchersCol = collection(db, 'vouchers');
+  return onSnapshot(
+    vouchersCol,
+    (snapshot) => {
+      if (snapshot.empty) {
+        // Seed default vouchers if empty
+        DEFAULT_VOUCHERS.forEach((v) => {
+          addDoc(vouchersCol, { ...v, createdAt: new Date().toISOString() }).catch(() => {});
+        });
+        callback(DEFAULT_VOUCHERS.map((v, i) => ({ id: `default-${i}`, ...v })));
+      } else {
+        const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Voucher));
+        callback(list);
+      }
+    },
+    (error) => {
+      console.warn('Vouchers subscription note:', error);
+      callback(DEFAULT_VOUCHERS.map((v, i) => ({ id: `default-${i}`, ...v })));
+    }
+  );
+}
+
+export async function addVoucher(data: Omit<Voucher, 'id'>): Promise<string> {
+  const now = new Date().toISOString();
+  const vRef = doc(collection(db, 'vouchers'));
+  try {
+    await setDoc(vRef, {
+      ...data,
+      id: vRef.id,
+      code: data.code.trim().toUpperCase(),
+      createdAt: now,
+    });
+    return vRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'vouchers');
+    throw error;
+  }
+}
+
+export async function updateVoucher(id: string, data: Partial<Voucher>): Promise<void> {
+  const vRef = doc(db, 'vouchers', id);
+  try {
+    await updateDoc(vRef, data);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `vouchers/${id}`);
+    throw error;
+  }
+}
+
+export async function deleteVoucher(id: string): Promise<void> {
+  const vRef = doc(db, 'vouchers', id);
+  try {
+    await deleteDoc(vRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `vouchers/${id}`);
+    throw error;
+  }
+}
+
+// ==========================================
+// 3. ULASAN PEMBELI (VERIFIED BUYER REVIEWS)
+// ==========================================
+export function subscribeToReviews(callback: (reviews: ProductReview[]) => void) {
+  const reviewsCol = collection(db, 'reviews');
+  return onSnapshot(
+    reviewsCol,
+    (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as ProductReview));
+      callback(list);
+    },
+    (error) => {
+      console.warn('Reviews subscription note:', error);
+      callback([]);
+    }
+  );
+}
+
+export async function addCustomerReview(
+  data: Omit<ProductReview, 'id' | 'createdAt' | 'isApproved'>
+): Promise<string> {
+  const now = new Date().toISOString();
+  const rRef = doc(collection(db, 'reviews'));
+  try {
+    await setDoc(rRef, {
+      ...data,
+      id: rRef.id,
+      isApproved: true,
+      createdAt: now,
+    });
+    return rRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'reviews');
+    throw error;
+  }
+}
+
+export async function moderateReview(reviewId: string, isApproved: boolean): Promise<void> {
+  const rRef = doc(db, 'reviews', reviewId);
+  try {
+    await updateDoc(rRef, { isApproved });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `reviews/${reviewId}`);
+    throw error;
+  }
+}
+
+export async function deleteReview(reviewId: string): Promise<void> {
+  const rRef = doc(db, 'reviews', reviewId);
+  try {
+    await deleteDoc(rRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `reviews/${reviewId}`);
+    throw error;
+  }
+}
+
+// ==========================================
+// 4. RETUR & TUKAR UKURAN (RETURN / EXCHANGE)
+// ==========================================
+export function subscribeToReturns(callback: (returns: OrderReturn[]) => void) {
+  const returnsCol = collection(db, 'returns');
+  return onSnapshot(
+    returnsCol,
+    (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as OrderReturn));
+      callback(list);
+    },
+    (error) => {
+      console.warn('Returns subscription note:', error);
+      callback([]);
+    }
+  );
+}
+
+export async function createOrderReturn(
+  data: Omit<OrderReturn, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'stockRestored'>
+): Promise<string> {
+  const now = new Date().toISOString();
+  const retRef = doc(collection(db, 'returns'));
+  try {
+    await setDoc(retRef, {
+      ...data,
+      id: retRef.id,
+      status: 'Menunggu Pemeriksaan',
+      stockRestored: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return retRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'returns');
+    throw error;
+  }
+}
+
+export async function updateReturnStatusAndRestoreStock(
+  returnItem: OrderReturn,
+  newStatus: OrderReturn['status'],
+  adminNotes?: string,
+  actor: string = 'Admin Retur'
+): Promise<void> {
+  const now = new Date().toISOString();
+  const retRef = doc(db, 'returns', returnItem.id);
+
+  // User confirmed constraint: "Hanya setelah barang retur diterima dan disetujui admin"
+  const shouldRestoreStock =
+    newStatus === 'Barang Diterima & Selesai' && !returnItem.stockRestored;
+
+  if (shouldRestoreStock) {
+    await runTransaction(db, async (transaction) => {
+      for (const item of returnItem.items) {
+        const prodRef = doc(db, 'products', item.productId);
+        const prodSnap = await transaction.get(prodRef);
+        if (prodSnap.exists()) {
+          const prodData = prodSnap.data() as Product;
+          const currentSizeStock = getProductSizeStock(prodData);
+          const currentSizeQty = Number(currentSizeStock[item.size]) || 0;
+          const newSizeQty = currentSizeQty + item.quantity;
+          const updatedSizeStock = { ...currentSizeStock, [item.size]: newSizeQty };
+          const newTotalStock = calculateTotalFromSizeStock(updatedSizeStock);
+
+          transaction.update(prodRef, {
+            sizeStock: updatedSizeStock,
+            stock: newTotalStock,
+            updatedAt: now,
+          });
+
+          const mutRef = doc(collection(db, 'stock_mutations'));
+          transaction.set(mutRef, {
+            id: mutRef.id,
+            productId: item.productId,
+            productName: item.name,
+            size: item.size,
+            orderNumber: returnItem.orderNumber,
+            type: 'IN',
+            quantity: item.quantity,
+            notes: `[Retur Diterima] Barang fisik diterima & disetujui admin untuk pesanan #${returnItem.orderNumber} (Size ${item.size} +${item.quantity})`,
+            previousStock: prodData.stock || 0,
+            newStock: newTotalStock,
+            timestamp: now,
+            actor,
+            source: 'WEBSTORE',
+          });
+        }
+      }
+
+      transaction.update(retRef, {
+        status: newStatus,
+        stockRestored: true,
+        adminNotes: adminNotes || returnItem.adminNotes || 'Barang fisik telah diperiksa & stok berhasil dipulihkan.',
+        updatedAt: now,
+      });
+    });
+  } else {
+    const payload: Record<string, any> = {
+      status: newStatus,
+      updatedAt: now,
+    };
+    if (adminNotes !== undefined) payload.adminNotes = adminNotes;
+    await updateDoc(retRef, payload);
+  }
+}
+
+// ==========================================
+// 5. BACKUP & PEMELIHARAAN DATABASE (JSON EXPORT)
+// ==========================================
+export async function exportDatabaseBackup(): Promise<string> {
+  const [prodsSnap, ordersSnap, settingsSnap, vouchersSnap, reviewsSnap, returnsSnap, mutationsSnap] =
+    await Promise.all([
+      getDocs(collection(db, 'products')),
+      getDocs(collection(db, 'orders')),
+      getDocs(collection(db, 'settings')),
+      getDocs(collection(db, 'vouchers')),
+      getDocs(collection(db, 'reviews')),
+      getDocs(collection(db, 'returns')),
+      getDocs(collection(db, 'stock_mutations')),
+    ]);
+
+  const backupData = {
+    backupDate: new Date().toISOString(),
+    storeName: 'Mochi Steps',
+    stats: {
+      productsCount: prodsSnap.size,
+      ordersCount: ordersSnap.size,
+      vouchersCount: vouchersSnap.size,
+      reviewsCount: reviewsSnap.size,
+      returnsCount: returnsSnap.size,
+      mutationsCount: mutationsSnap.size,
+    },
+    products: prodsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    orders: ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    settings: settingsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    vouchers: vouchersSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    reviews: reviewsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    returns: returnsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    mutations: mutationsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+  };
+
+  return JSON.stringify(backupData, null, 2);
 }

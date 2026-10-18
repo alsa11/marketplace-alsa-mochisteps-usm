@@ -17,10 +17,13 @@ import {
   Upload,
   Image as ImageIcon,
   Eye,
+  Star,
+  Undo2,
+  Calendar,
 } from 'lucide-react';
-import { Order, OrderStatus } from '../types';
+import { Order, OrderStatus, OrderItem } from '../types';
 import { FlatshoeImage } from './FlatshoeImage';
-import { cancelCustomerOrder, updateOrderPaymentProof } from '../lib/firestoreService';
+import { cancelCustomerOrder, updateOrderPaymentProof, addCustomerReview, createOrderReturn } from '../lib/firestoreService';
 import { compressImageFile } from '../lib/imageUtils';
 
 interface OrderTrackingModalProps {
@@ -47,6 +50,24 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const [proofUploadSuccess, setProofUploadSuccess] = useState<string | null>(null);
   const [previewProofModal, setPreviewProofModal] = useState<string | null>(null);
 
+  // Review Modal State
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedReviewItem, setSelectedReviewItem] = useState<OrderItem | null>(null);
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState<string>('');
+  const [reviewPhoto, setReviewPhoto] = useState<string | null>(null);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewSuccessNotice, setReviewSuccessNotice] = useState<string | null>(null);
+
+  // Return & Size Exchange Modal State
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [returnType, setReturnType] = useState<'Tukar Ukuran' | 'Pengembalian Dana (Refund)'>('Tukar Ukuran');
+  const [returnRequestedSize, setReturnRequestedSize] = useState<number>(39);
+  const [returnReason, setReturnReason] = useState<string>('');
+  const [returnPhoto, setReturnPhoto] = useState<string | null>(null);
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [returnSuccessNotice, setReturnSuccessNotice] = useState<string | null>(null);
+
   const handleUploadProof = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !matchedOrder) return;
@@ -65,6 +86,77 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
       alert('Gagal mengunggah foto bukti: ' + (err?.message || 'Error'));
     } finally {
       setIsUploadingProof(false);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!matchedOrder || !selectedReviewItem) return;
+    if (!reviewComment.trim()) {
+      alert('Silakan tuliskan ulasan komentar Anda.');
+      return;
+    }
+
+    try {
+      setIsSubmittingReview(true);
+      await addCustomerReview({
+        productId: selectedReviewItem.productId,
+        productName: selectedReviewItem.name,
+        orderId: matchedOrder.id,
+        orderNumber: matchedOrder.orderNumber,
+        customerName: matchedOrder.customerName,
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+        photoUrl: reviewPhoto || undefined,
+        size: selectedReviewItem.size,
+      });
+
+      setReviewSuccessNotice('Terima kasih! Ulasan bintang Anda telah berhasil dikirim dan tersimpan.');
+      setTimeout(() => {
+        setReviewSuccessNotice(null);
+        setReviewModalOpen(false);
+        setSelectedReviewItem(null);
+        setReviewComment('');
+        setReviewPhoto(null);
+      }, 2500);
+    } catch (e: any) {
+      alert('Gagal mengirim ulasan: ' + (e?.message || 'Error'));
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handleSubmitReturn = async () => {
+    if (!matchedOrder) return;
+    if (!returnReason.trim()) {
+      alert('Silakan tuliskan alasan retur atau penukaran ukuran.');
+      return;
+    }
+
+    try {
+      setIsSubmittingReturn(true);
+      await createOrderReturn({
+        orderId: matchedOrder.id,
+        orderNumber: matchedOrder.orderNumber,
+        customerName: matchedOrder.customerName,
+        customerPhone: matchedOrder.customerPhone,
+        items: matchedOrder.items,
+        reason: returnReason.trim(),
+        photoUrl: returnPhoto || undefined,
+        returnType,
+        requestedSize: returnType === 'Tukar Ukuran' ? returnRequestedSize : undefined,
+      });
+
+      setReturnSuccessNotice('Pengajuan retur / tukar ukuran Anda berhasil dikirim ke Admin. Tim kami akan segera meninjau.');
+      setTimeout(() => {
+        setReturnSuccessNotice(null);
+        setReturnModalOpen(false);
+        setReturnReason('');
+        setReturnPhoto(null);
+      }, 3000);
+    } catch (e: any) {
+      alert('Gagal mengirim pengajuan retur: ' + (e?.message || 'Error'));
+    } finally {
+      setIsSubmittingReturn(false);
     }
   };
 
@@ -347,38 +439,76 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               )}
             </div>
 
-            {/* Courier & Tracking Number Card */}
-            <div className="p-4 bg-white rounded-2xl border border-pink-100 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-              <div>
-                <span className="text-gray-500 block">Jasa Ekspedisi:</span>
-                <span className="font-bold text-gray-900">{matchedOrder.courier || 'Kurir Reguler Toko'}</span>
-              </div>
+            {/* Courier & Tracking Number Card with Shipping Date */}
+            <div className="p-4 bg-white rounded-2xl border border-pink-100 shadow-2xs space-y-2 text-xs">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-gray-500 block">Jasa Ekspedisi:</span>
+                  <span className="font-bold text-gray-900">{matchedOrder.courier || 'Kurir Reguler Toko'}</span>
+                </div>
 
-              <div>
-                <span className="text-gray-500 block">Nomor Resi Pengiriman:</span>
-                {matchedOrder.trackingNumber ? (
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-extrabold text-sm text-gray-900 bg-gray-100 px-2.5 py-0.5 rounded-lg border border-gray-200">
-                      {matchedOrder.trackingNumber}
+                {matchedOrder.shippingDate && (
+                  <div>
+                    <span className="text-gray-500 block">Tanggal Pengiriman:</span>
+                    <span className="font-bold text-gray-800 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-pink-600" />
+                      <span>{matchedOrder.shippingDate}</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(matchedOrder.trackingNumber || '');
-                        setCopiedResi(true);
-                        setTimeout(() => setCopiedResi(false), 2000);
-                      }}
-                      className="p-1 text-gray-500 hover:text-[#be185d] cursor-pointer"
-                      title="Salin Resi"
-                    >
-                      {copiedResi ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                    </button>
                   </div>
-                ) : (
-                  <span className="text-gray-400 italic">Sedang disiapkan oleh tim gudang</span>
                 )}
+
+                <div>
+                  <span className="text-gray-500 block">Nomor Resi Pengiriman:</span>
+                  {matchedOrder.trackingNumber ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-extrabold text-sm text-gray-900 bg-gray-100 px-2.5 py-0.5 rounded-lg border border-gray-200">
+                        {matchedOrder.trackingNumber}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(matchedOrder.trackingNumber || '');
+                          setCopiedResi(true);
+                          setTimeout(() => setCopiedResi(false), 2000);
+                        }}
+                        className="p-1 text-gray-500 hover:text-[#be185d] cursor-pointer"
+                        title="Salin Resi"
+                      >
+                        {copiedResi ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400 italic">Sedang disiapkan oleh tim gudang</span>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Riwayat Perubahan Status Pesanan (Audit Trail History) */}
+            {matchedOrder.statusHistory && matchedOrder.statusHistory.length > 0 && (
+              <div className="p-4 bg-white rounded-2xl border border-pink-100 shadow-2xs space-y-2.5 text-xs">
+                <span className="font-bold text-gray-800 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-[#be185d]" />
+                  <span>Riwayat Perjalanan & Status Pesanan:</span>
+                </span>
+                <div className="space-y-3 border-l-2 border-pink-200 pl-3.5 ml-2 pt-1">
+                  {matchedOrder.statusHistory.map((hist, idx) => (
+                    <div key={idx} className="relative space-y-0.5">
+                      <div className="absolute -left-[20px] top-1 w-2.5 h-2.5 rounded-full bg-[#be185d] border-2 border-white ring-2 ring-pink-200" />
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-gray-900 text-xs">{hist.status}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">
+                          {new Date(hist.timestamp).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      {hist.notes && (
+                        <p className="text-[11px] text-gray-600 leading-relaxed font-sans">{hist.notes}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Product Items Details with Photos */}
             <div className="space-y-2.5">
@@ -599,6 +729,46 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 </div>
               )}
 
+            {/* Action Box for Completed Orders: Reviews & Returns */}
+            {matchedOrder.orderStatus === 'Selesai' && (
+              <div className="p-4 bg-gradient-to-r from-pink-50 to-pink-100/60 rounded-2xl border border-pink-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-xs">Pesanan Telah Selesai Diterima!</h4>
+                    <p className="text-[11px] text-gray-600">Bagaimana kenyamanan flatshoes Mochi Steps Anda?</p>
+                  </div>
+                  <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                    Garansi Aktif
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedReviewItem(matchedOrder.items[0]);
+                      setReviewModalOpen(true);
+                    }}
+                    className="py-2.5 px-3 rounded-xl bg-[#be185d] hover:bg-[#9d174d] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Star className="w-4 h-4 fill-amber-300 text-amber-300" />
+                    <span>Beri Ulasan Produk</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReturnModalOpen(true);
+                    }}
+                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-pink-50 text-[#be185d] font-bold text-xs border border-pink-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Undo2 className="w-4 h-4" />
+                    <span>Ajukan Retur / Tukar Ukuran</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Direct WhatsApp Contact Button */}
             <div className="flex justify-end gap-2 pt-2">
               <a
@@ -646,6 +816,296 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               >
                 Tutup Pratinjau
               </button>
+            </div>
+          </div>
+        )}
+        {/* Modal Beri Ulasan Produk Pembeli */}
+        {reviewModalOpen && matchedOrder && selectedReviewItem && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
+            <div className="relative w-full max-w-md bg-white rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-pink-100">
+              <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                  <h3 className="font-heading font-extrabold text-base text-gray-900">
+                    Beri Ulasan Produk
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReviewModalOpen(false)}
+                  className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Product preview */}
+              <div className="p-3 bg-pink-50/50 rounded-2xl border border-pink-100 flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-pink-200 shrink-0">
+                  <FlatshoeImage src={selectedReviewItem.imageUrl} alt={selectedReviewItem.name} className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-gray-900">{selectedReviewItem.name}</h4>
+                  <p className="text-[10px] text-gray-500">
+                    Ukuran EU {selectedReviewItem.size} • {selectedReviewItem.color}
+                  </p>
+                </div>
+              </div>
+
+              {reviewSuccessNotice && (
+                <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{reviewSuccessNotice}</span>
+                </div>
+              )}
+
+              {/* Star Rating Selector */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  Rating Bintang:
+                </label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setReviewRating(st)}
+                      className="p-1 hover:scale-110 transition-transform cursor-pointer"
+                    >
+                      <Star
+                        className={`w-7 h-7 ${
+                          st <= reviewRating
+                            ? 'fill-amber-400 text-amber-400'
+                            : 'text-gray-300'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-xs font-bold text-amber-600 ml-2">
+                    {reviewRating} dari 5 Bintang
+                  </span>
+                </div>
+              </div>
+
+              {/* Comment text */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  Ulasan & Pengalaman Pemakaian:
+                </label>
+                <textarea
+                  rows={3}
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Ceritakan seberapa empuk bantalan CloudMochi 8mm dan kenyamanan ukuran sepatu Anda..."
+                  className="w-full p-3 rounded-2xl border border-pink-200 text-xs focus:ring-2 focus:ring-pink-300 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Optional Photo Attachment */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  Foto Pemakaian (Opsional):
+                </label>
+                {reviewPhoto ? (
+                  <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-pink-200">
+                    <img src={reviewPhoto} alt="Foto ulasan" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setReviewPhoto(null)}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-red-600 text-white cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="py-2.5 px-3 rounded-xl border border-dashed border-pink-300 bg-pink-50/50 hover:bg-pink-50 text-[#be185d] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const base64 = await compressImageFile(file, 600, 0.8);
+                          setReviewPhoto(base64);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <Upload className="w-4 h-4" />
+                    <span>Unggah Foto Sepatu</span>
+                  </label>
+                )}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitReview}
+                  disabled={isSubmittingReview}
+                  className="px-5 py-2.5 rounded-xl bg-[#be185d] hover:bg-[#9d174d] text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingReview ? 'Mengirim...' : 'Kirim Ulasan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Ajukan Retur / Tukar Ukuran */}
+        {returnModalOpen && matchedOrder && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
+            <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-pink-100">
+              <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Undo2 className="w-5 h-5 text-[#be185d]" />
+                  <h3 className="font-heading font-extrabold text-base text-gray-900">
+                    Pengajuan Retur / Tukar Ukuran
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReturnModalOpen(false)}
+                  className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-pink-50/60 rounded-2xl text-xs space-y-1 border border-pink-100">
+                <p className="font-bold text-gray-900">Pesanan #{matchedOrder.orderNumber}</p>
+                <p className="text-gray-600">Pelanggan: {matchedOrder.customerName} ({matchedOrder.customerPhone})</p>
+                <p className="text-[11px] text-pink-700 font-medium">
+                  {matchedOrder.items.map((it) => `${it.name} (EU ${it.size})`).join(', ')}
+                </p>
+              </div>
+
+              {returnSuccessNotice && (
+                <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{returnSuccessNotice}</span>
+                </div>
+              )}
+
+              {/* Pilihan Solusi: Tukar Ukuran atau Refund */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-gray-700">Pilih Solusi Retur:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Tukar Ukuran', 'Pengembalian Dana (Refund)'] as const).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setReturnType(type)}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        returnType === type
+                          ? 'border-[#be185d] bg-pink-50 text-[#be185d] shadow-2xs'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ukuran Pengganti jika Tukar Ukuran */}
+              {returnType === 'Tukar Ukuran' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Pilih Ukuran Baru yang Diinginkan (EU):
+                  </label>
+                  <select
+                    value={returnRequestedSize}
+                    onChange={(e) => setReturnRequestedSize(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-xl border border-pink-200 text-xs font-bold text-gray-800 bg-white focus:ring-2 focus:ring-pink-300 focus:outline-hidden"
+                  >
+                    {[36, 37, 38, 39, 40, 41].map((s) => (
+                      <option key={s} value={s}>
+                        Ukuran EU {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Alasan Retur */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Alasan Retur / Penukaran:
+                </label>
+                <textarea
+                  rows={3}
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                  placeholder="Contoh: Sepatu agak sempit di bagian jari kaki, ingin tukar naik 1 nomor ke EU 39..."
+                  className="w-full p-3 rounded-2xl border border-pink-200 text-xs focus:ring-2 focus:ring-pink-300 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Foto Kondisi Sepatu */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Foto Kondisi Sepatu & Sol (Wajib):
+                </label>
+                {returnPhoto ? (
+                  <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-pink-200">
+                    <img src={returnPhoto} alt="Kondisi barang retur" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setReturnPhoto(null)}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-red-600 text-white cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="py-3 px-3 rounded-xl border border-dashed border-pink-300 bg-pink-50/50 hover:bg-pink-50 text-[#be185d] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const base64 = await compressImageFile(file, 600, 0.8);
+                          setReturnPhoto(base64);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <Upload className="w-4 h-4" />
+                    <span>Unggah Foto Sepatu & Dus</span>
+                  </label>
+                )}
+              </div>
+
+              {/* Kebijakan Retur Callout */}
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 leading-relaxed">
+                <strong>Kebijakan Retur Mochi Steps:</strong> Sepatu harus dalam kondisi belum dipakai ke luar ruangan dan sol tetap bersih. Stok barang pengganti akan diverifikasi dan disetujui setelah barang fisik retur diterima oleh tim toko.
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReturnModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitReturn}
+                  disabled={isSubmittingReturn}
+                  className="px-5 py-2.5 rounded-xl bg-[#be185d] hover:bg-[#9d174d] text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingReturn ? 'Mengirim Pengajuan...' : 'Kirim Pengajuan Retur'}
+                </button>
+              </div>
             </div>
           </div>
         )}

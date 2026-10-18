@@ -18,12 +18,15 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { MochiLogo } from './MochiLogo';
+import { StoreSettings } from '../types';
+import { X, FileText } from 'lucide-react';
 
 interface FooterProps {
   onOpenInsoleGuide?: () => void;
   onFilterCategory?: (category: string) => void;
   onOpenOrderTracking?: () => void;
   onSecretAdminClick?: () => void;
+  storeSettings?: StoreSettings;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -31,6 +34,7 @@ export const Footer: React.FC<FooterProps> = ({
   onFilterCategory,
   onOpenOrderTracking,
   onSecretAdminClick,
+  storeSettings,
 }) => {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
@@ -38,6 +42,12 @@ export const Footer: React.FC<FooterProps> = ({
   const [subscriberInput, setSubscriberInput] = useState('');
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [voucherCopied, setVoucherCopied] = useState(false);
+
+  // Policy Modal State (Terms, Privacy, Return Policy)
+  const [activePolicyModal, setActivePolicyModal] = useState<{
+    title: string;
+    content: string;
+  } | null>(null);
 
   const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
@@ -223,29 +233,30 @@ export const Footer: React.FC<FooterProps> = ({
               <div className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-[#e28da2] shrink-0 mt-0.5" />
                 <span className="leading-tight">
-                  <strong className="text-white">Workshop & Pengiriman:</strong> Solo, Jawa Tengah — Pengrajin Sepatu Lokal Indonesia
+                  <strong className="text-white">Workshop & Alamat:</strong>{' '}
+                  {storeSettings?.address ? `${storeSettings.address}, ${storeSettings.city}` : 'Solo, Jawa Tengah — Pengrajin Sepatu Lokal Indonesia'}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <Phone className="w-4 h-4 text-[#e28da2] shrink-0" />
                 <a
-                  href="https://wa.me/62819456732451?text=Halo%20Admin%20Mochi%20Steps,%20saya%20ingin%20konsultasi%20ukuran%20dan%20koleksi%20sepatu"
+                  href={`https://wa.me/${(storeSettings?.whatsappNumber || '6281945673245').replace(/[^0-9]/g, '')}?text=Halo%20Admin%20Mochi%20Steps,%20saya%20ingin%20konsultasi%20ukuran%20dan%20koleksi%20sepatu`}
                   target="_blank"
                   rel="noreferrer"
                   className="hover:text-pink-300 transition-colors font-medium"
                 >
-                  0819456732451 (WhatsApp CS)
+                  {storeSettings?.phone || storeSettings?.whatsappNumber || '081945673245'} (WhatsApp CS)
                 </a>
               </div>
               <div className="flex items-center gap-3">
                 <Mail className="w-4 h-4 text-[#e28da2] shrink-0" />
-                <a href="mailto:admin@mochisteps.com" className="hover:text-pink-300 transition-colors">
-                  admin@mochisteps.com
+                <a href={`mailto:${storeSettings?.email || 'admin@mochisteps.com'}`} className="hover:text-pink-300 transition-colors">
+                  {storeSettings?.email || 'admin@mochisteps.com'}
                 </a>
               </div>
               <div className="flex items-center gap-3 text-[#9e8d85]">
                 <Clock className="w-4 h-4 text-[#e28da2] shrink-0" />
-                <span>Jam Layanan CS: Setiap Hari (08.00 - 21.00 WIB)</span>
+                <span>Jam Layanan CS: {storeSettings?.operationalHours || 'Setiap Hari (08.00 - 21.00 WIB)'}</span>
               </div>
             </div>
 
@@ -349,16 +360,55 @@ export const Footer: React.FC<FooterProps> = ({
                 </button>
               </li>
               <li>
-                <span className="flex items-center gap-2 text-[#c2b3ad]">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActivePolicyModal({
+                      title: 'Kebijakan Garansi & Retur Tukar Ukuran',
+                      content:
+                        storeSettings?.returnPolicy ||
+                        'Garansi tukar ukuran berlaku maksimal 7 hari sejak barang diterima kurir. Sepatu harus dalam kondisi belum dipakai ke luar rumah, sol bersih, dan dus lengkap.',
+                    })
+                  }
+                  className="hover:text-pink-300 text-left transition-colors font-medium flex items-center gap-2 cursor-pointer"
+                >
                   <RotateCcw className="w-3.5 h-3.5 text-[#e28da2]" />
                   <span>Garansi Tukar Ukuran 7 Hari</span>
-                </span>
+                </button>
               </li>
               <li>
-                <span className="flex items-center gap-2 text-[#c2b3ad]">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActivePolicyModal({
+                      title: 'Syarat & Ketentuan Layanan',
+                      content:
+                        storeSettings?.termsAndConditions ||
+                        'Semua produk Mochi Steps bergaransi keaslian 100%. Pesanan diproses setelah pembayaran terverifikasi oleh tim admin.',
+                    })
+                  }
+                  className="hover:text-pink-300 text-left transition-colors font-medium flex items-center gap-2 cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#e28da2]" />
+                  <span>Syarat & Ketentuan Layanan</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActivePolicyModal({
+                      title: 'Kebijakan Privasi Pelanggan',
+                      content:
+                        storeSettings?.privacyPolicy ||
+                        'Kami menghargai privasi Anda. Nomor telepon, alamat kirim, dan data pesanan Anda terenkripsi dan tidak akan dibagikan ke pihak ketiga.',
+                    })
+                  }
+                  className="hover:text-pink-300 text-left transition-colors font-medium flex items-center gap-2 cursor-pointer"
+                >
                   <ShieldCheck className="w-3.5 h-3.5 text-[#e28da2]" />
-                  <span>100% Jahitan Rapi Berkualitas</span>
-                </span>
+                  <span>Kebijakan Privasi</span>
+                </button>
               </li>
               <li>
                 <a
@@ -473,6 +523,51 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Policy Modal Popup */}
+      {activePolicyModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fade-in font-sans text-gray-900"
+          onClick={() => setActivePolicyModal(null)}
+        >
+          <div
+            className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-pink-100 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-pink-100 text-[#be185d]">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <h3 className="font-heading font-extrabold text-base text-gray-900">
+                  {activePolicyModal.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActivePolicyModal(null)}
+                className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs sm:text-sm text-gray-700 leading-relaxed space-y-3 font-sans">
+              <p className="whitespace-pre-line">{activePolicyModal.content}</p>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setActivePolicyModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-[#be185d] text-white font-bold text-xs hover:bg-[#9d174d] cursor-pointer"
+              >
+                Saya Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </footer>
   );
 };
