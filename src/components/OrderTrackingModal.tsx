@@ -264,14 +264,16 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-pink-100 p-6 sm:p-8 space-y-6"
+        className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-pink-100 p-4 sm:p-8 space-y-5 sm:space-y-6"
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-pink-50 transition-colors cursor-pointer"
+          className="absolute top-3 right-3 sm:top-5 sm:right-5 w-9 h-9 sm:w-10 sm:h-10 rounded-full text-gray-400 hover:text-gray-700 bg-white/90 sm:bg-gray-100 hover:bg-pink-50 transition-colors z-20 flex items-center justify-center shadow-xs cursor-pointer"
+          aria-label="Tutup"
         >
           <X className="w-5 h-5" />
         </button>
@@ -321,15 +323,15 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
             <span className="text-[11px] text-gray-400 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Verifikasi privasi pesanan terjaga</span>
             </span>
 
             <button
               type="submit"
-              className="py-2 px-5 rounded-xl bg-gradient-to-r from-[#d65b7d] to-[#be185d] text-white font-bold text-xs shadow-xs hover:brightness-105 transition-all cursor-pointer flex items-center gap-1.5"
+              className="w-full sm:w-auto py-2.5 px-5 rounded-xl bg-gradient-to-r from-[#d65b7d] to-[#be185d] text-white font-bold text-xs shadow-xs hover:brightness-105 transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[42px]"
             >
               <Search className="w-3.5 h-3.5" />
               <span>Verifikasi & Lacak Pesanan</span>
@@ -788,8 +790,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 
         {/* Modal Zoom Bukti Pembayaran Pelanggan */}
         {previewProofModal && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-            <div className="relative w-full max-w-md bg-white rounded-3xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+            <div className="relative w-full max-w-[95vw] sm:max-w-md bg-white rounded-3xl p-4 sm:p-5 space-y-3 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-pink-100 pb-2">
                 <h3 className="font-bold text-sm text-gray-900">Bukti Transfer Pembayaran</h3>
                 <button
@@ -821,8 +823,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
         )}
         {/* Modal Beri Ulasan Produk Pembeli */}
         {reviewModalOpen && matchedOrder && selectedReviewItem && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
-            <div className="relative w-full max-w-md bg-white rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-pink-100">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
+            <div className="relative w-full max-w-[95vw] sm:max-w-md bg-white rounded-3xl p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-pink-100">
               <div className="flex items-center justify-between border-b border-pink-100 pb-3">
                 <div className="flex items-center gap-2">
                   <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
@@ -960,8 +962,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 
         {/* Modal Ajukan Retur / Tukar Ukuran */}
         {returnModalOpen && matchedOrder && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
-            <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-pink-100">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
+            <div className="relative w-full max-w-[95vw] sm:max-w-lg bg-white rounded-3xl p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-pink-100">
               <div className="flex items-center justify-between border-b border-pink-100 pb-3">
                 <div className="flex items-center gap-2">
                   <Undo2 className="w-5 h-5 text-[#be185d]" />

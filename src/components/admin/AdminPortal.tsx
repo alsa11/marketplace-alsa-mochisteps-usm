@@ -92,6 +92,7 @@ interface AdminPortalProps {
   vouchers?: Voucher[];
   reviews?: ProductReview[];
   returns?: OrderReturn[];
+  isMobileLayout?: boolean;
 }
 
 export type AdminTab =
@@ -119,6 +120,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   vouchers = [],
   reviews = [],
   returns = [],
+  isMobileLayout = false,
 }) => {
   // Navigation State - Default to Dashboard
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
@@ -1010,9 +1012,141 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </button>
             </div>
 
-            {/* Products Table */}
+            {/* Products Container */}
             <div className="bg-white rounded-3xl border border-pink-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
+              {/* 1. Mobile Card View (< 768px) */}
+              <div className={`${isMobileLayout ? 'block' : 'block md:hidden'} space-y-3 p-3 sm:p-4 bg-pink-50/20`}>
+                {products.length === 0 ? (
+                  <div className="py-12 text-center text-gray-400 bg-white rounded-2xl border border-pink-100">
+                    Belum ada produk sepatu flatshoes.
+                  </div>
+                ) : (
+                  products.map((p) => {
+                    const sizeMap = getProductSizeStock(p);
+                    const totalPhysical = calculateTotalFromSizeStock(sizeMap);
+                    const min = p.minStock !== undefined ? p.minStock : 5;
+                    const isLow = totalPhysical <= min;
+                    const isOut = totalPhysical === 0;
+                    const cost = p.costPrice || Math.round(p.price * 0.55);
+
+                    return (
+                      <div
+                        key={p.id}
+                        className="bg-white rounded-2xl p-4 border border-pink-100 shadow-2xs space-y-3"
+                      >
+                        {/* Top: Photo + Name + Status */}
+                        <div className="flex items-start gap-3">
+                          <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-pink-100 border border-pink-200">
+                            <FlatshoeImage
+                              src={p.imageUrl}
+                              alt={p.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-1">
+                              <h3 className="font-heading font-bold text-gray-900 text-sm truncate">
+                                {p.name}
+                              </h3>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${
+                                  isOut
+                                    ? 'bg-red-500 text-white'
+                                    : isLow
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {isOut ? 'Habis' : isLow ? 'Menipis' : 'Aman'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 mt-0.5">
+                              {p.category} • {p.color}
+                            </p>
+                            <div className="mt-1 flex items-baseline gap-2">
+                              <span className="font-heading font-extrabold text-sm text-[#be185d]">
+                                {formatRupiah(p.price)}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                HPP: {formatRupiah(cost)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Size Breakdown */}
+                        <div className="bg-pink-50/50 p-2.5 rounded-xl border border-pink-100/60 text-xs">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                              Stok per Ukuran:
+                            </span>
+                            <span className="font-mono font-extrabold text-xs text-[#be185d]">
+                              Total: {totalPhysical} pasang
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {DEFAULT_SIZES.map((sz) => {
+                              const q = sizeMap[sz] || 0;
+                              return (
+                                <span
+                                  key={sz}
+                                  className={`px-2 py-0.5 rounded-lg font-mono text-[11px] font-bold border ${
+                                    q === 0
+                                      ? 'bg-gray-100 text-gray-400 border-gray-200'
+                                      : q <= 2
+                                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                      : 'bg-white text-[#be185d] border-pink-200'
+                                  }`}
+                                >
+                                  {sz}:{q}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Bottom Action Buttons */}
+                        <div className="pt-2 border-t border-pink-50 flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSizeStockProduct(p);
+                              setTempSizeStock(getProductSizeStock(p));
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-pink-100 hover:bg-[#be185d] text-[#be185d] hover:text-white font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5 min-h-[40px]"
+                          >
+                            <Sliders className="w-3.5 h-3.5" />
+                            <span>Edit Stok</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingProduct(p)}
+                            className="p-2.5 rounded-xl bg-gray-100 hover:bg-pink-50 text-gray-700 hover:text-[#be185d] font-bold transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
+                            title="Edit Detail Sepatu"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (confirm(`Hapus produk "${p.name}" dari katalog?`)) {
+                                await deleteProduct(p.id);
+                              }
+                            }}
+                            className="p-2.5 rounded-xl bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
+                            title="Hapus Produk"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* 2. Desktop Table View (>= 768px) */}
+              <div className={`${isMobileLayout ? 'hidden' : 'hidden md:block'} overflow-x-auto`}>
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#fff2f5] text-[#862744] font-bold border-b border-pink-100">
                     <tr>
@@ -1197,9 +1331,106 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               ))}
             </div>
 
-            {/* Orders Table */}
+            {/* Orders Data Container: Responsive Cards for Mobile & Table for Desktop */}
             <div className="bg-white rounded-3xl border border-pink-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
+              {/* 1. Mobile Cards View (< 768px) */}
+              <div className={`${isMobileLayout ? 'block' : 'md:hidden'} divide-y divide-pink-100`}>
+                {filteredOrders.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400 text-xs">
+                    Tidak ada pesanan webstore yang sesuai filter.
+                  </div>
+                ) : (
+                  filteredOrders.map((ord) => (
+                    <div key={ord.id} className="p-4 space-y-3 hover:bg-pink-50/20 transition-colors">
+                      {/* Top: Order # & Status Badges */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                          <span className="font-mono font-bold text-xs text-[#be185d]">
+                            #{ord.orderNumber}
+                          </span>
+                          <span className="block text-[10px] text-gray-400 font-mono">
+                            {new Date(ord.createdAt).toLocaleString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              ord.paymentStatus === 'Lunas'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            {ord.paymentStatus}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              ord.orderStatus === 'Selesai'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : ord.orderStatus === 'Dikirim'
+                                ? 'bg-purple-100 text-purple-800'
+                                : ord.orderStatus === 'Diproses'
+                                ? 'bg-blue-100 text-blue-800'
+                                : ord.orderStatus === 'Dibatalkan'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {ord.orderStatus}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Middle: Customer & Payment */}
+                      <div className="flex items-start justify-between text-xs pt-1">
+                        <div>
+                          <p className="font-bold text-gray-900">{ord.customerName}</p>
+                          <a
+                            href={`https://wa.me/${ord.customerPhone.replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] text-pink-600 font-mono hover:underline flex items-center gap-1 mt-0.5"
+                          >
+                            <MessageCircle className="w-3 h-3 text-emerald-600" />
+                            <span>{ord.customerPhone}</span>
+                          </a>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-heading font-extrabold text-sm text-[#be185d]">
+                            {formatRupiah(ord.totalAmount)}
+                          </p>
+                          <span className="text-[10px] text-gray-500 block truncate max-w-[140px]">{ord.paymentMethod}</span>
+                        </div>
+                      </div>
+
+                      {/* Bottom: Action Button (Min 44px tap target) */}
+                      <div className="pt-2 border-t border-pink-50 flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-gray-400">
+                          {ord.items?.length || 0} model flatshoes
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrderDetail(ord);
+                            setModalTrackingInput(ord.trackingNumber || '');
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-pink-50 hover:bg-[#be185d] text-[#be185d] hover:text-white font-bold text-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-2xs border border-pink-200 min-h-[40px]"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Detail & Status</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* 2. Desktop Table View (>= 768px) */}
+              <div className={`${isMobileLayout ? 'hidden' : 'hidden md:block'} overflow-x-auto`}>
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#fff2f5] text-[#862744] font-bold border-b border-pink-100">
                     <tr>
@@ -1257,8 +1488,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             <span
                               className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                                 ord.paymentStatus === 'Lunas'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
                               }`}
                             >
                               {ord.paymentStatus}
@@ -2304,7 +2535,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">Harga Jual (Rp):</label>
                   <input
@@ -2544,11 +2775,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
       {/* ================= MODAL: ADD PRODUCT ================= */}
       {isNewProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 p-6 sm:p-8 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 p-4 sm:p-8 space-y-4 max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setIsNewProductModalOpen(false)}
-              className="absolute top-5 right-5 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-pink-50 transition-colors"
+              className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-pink-50 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -2570,7 +2801,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">Kategori:</label>
                   <select
@@ -2595,7 +2826,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">HPP Modal (Rp):</label>
                   <input
@@ -2669,8 +2900,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
       {/* ================= MODAL: TOLAK PEMBAYARAN ================= */}
       {rejectingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-pink-100 p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-pink-100 p-4 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setRejectingOrder(null)}
               className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-pink-50 transition-colors cursor-pointer"
@@ -2780,8 +3011,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
       {/* ================= MODAL: ZOOM BUKTI PEMBAYARAN ================= */}
       {zoomedProofImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-[95vw] sm:max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 p-4 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setZoomedProofImage(null)}
               className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-pink-50 transition-colors cursor-pointer"

@@ -28,6 +28,7 @@ import {
   Filter,
   Eye,
   TrendingUp,
+  Package,
 } from 'lucide-react';
 import { Product, Order, PaymentMethod, PosCartItem } from '../../types';
 import { createPosTransaction, PosTransactionInput, subscribeToOrders } from '../../lib/firestoreService';
@@ -51,6 +52,7 @@ export const PosKasir: React.FC<PosKasirProps> = ({
 }) => {
   // Integrated Tab State: Kasir & Riwayat Transaksi
   const [activeTab, setActiveTab] = useState<'pos' | 'history'>('pos');
+  const [mobilePosView, setMobilePosView] = useState<'catalog' | 'cart'>('catalog');
 
   // Transactions State with real-time Firestore sync
   const [localOrders, setLocalOrders] = useState<Order[]>(orders);
@@ -572,10 +574,39 @@ export const PosKasir: React.FC<PosKasirProps> = ({
       </div>
 
       {activeTab === 'pos' ? (
-        /* Main Grid: Left Catalog & Right Cashier Terminal */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left: Product Catalog & Fast Size Picker (Col 7) */}
-          <div className="lg:col-span-7 space-y-4">
+        <div className="space-y-4">
+          {/* Mobile Switcher between Catalog and Cashier Cart (visible on screens < 1024px) */}
+          <div className="grid grid-cols-2 gap-2 bg-pink-100/70 p-1.5 rounded-2xl lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobilePosView('catalog')}
+              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                mobilePosView === 'catalog'
+                  ? 'bg-white text-[#be185d] shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" />
+              <span>1. Katalog Sepatu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobilePosView('cart')}
+              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                mobilePosView === 'cart'
+                  ? 'bg-[#be185d] text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>2. Keranjang & Bayar ({cart.reduce((s, it) => s + it.quantity, 0)})</span>
+            </button>
+          </div>
+
+          {/* Main Grid: Left Catalog & Right Cashier Terminal */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left: Product Catalog & Fast Size Picker (Col 7) */}
+            <div className={`lg:col-span-7 space-y-4 ${mobilePosView === 'cart' ? 'hidden lg:block' : 'block'}`}>
           
           {/* Search & Category Pills */}
           <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-3">
@@ -625,7 +656,7 @@ export const PosKasir: React.FC<PosKasirProps> = ({
           </div>
 
           {/* Product Cards Grid with smooth vertical scroll */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[calc(100vh-230px)] min-h-[480px] overflow-y-auto pr-2 pb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:max-h-[calc(100vh-230px)] lg:min-h-[480px] overflow-y-auto pr-1 sm:pr-2 pb-6">
             {filteredProducts.map((p) => {
               const isOutOfStock = p.stock <= 0;
               const isLowStock = p.stock > 0 && p.stock <= 5;
@@ -793,8 +824,8 @@ export const PosKasir: React.FC<PosKasirProps> = ({
         </div>
 
         {/* Right: Cashier Terminal / Cart & Payment (Col 5) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-5 flex flex-col justify-between">
+        <div className={`lg:col-span-5 space-y-4 ${mobilePosView === 'catalog' ? 'hidden lg:block' : 'block'}`}>
+          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-4 sm:p-5 flex flex-col justify-between">
             
             {/* Terminal Header */}
             <div>
@@ -1184,6 +1215,7 @@ export const PosKasir: React.FC<PosKasirProps> = ({
             </div>
           </div>
         </div>
+      </div>
       </div>
     ) : (
         /* TAB 2: RIWAYAT TRANSAKSI POS */

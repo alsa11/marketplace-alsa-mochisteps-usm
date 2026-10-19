@@ -396,15 +396,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
       <div
-        className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-pink-100 p-5 sm:p-8 my-6 max-h-[92vh] overflow-y-auto"
+        className="relative w-full max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-pink-100 p-4 sm:p-8 my-3 sm:my-6 max-h-[94vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-pink-50 transition-colors z-10 cursor-pointer"
+          className="absolute top-3 right-3 sm:top-5 sm:right-5 w-9 h-9 sm:w-10 sm:h-10 rounded-full text-gray-400 hover:text-gray-700 bg-white/90 sm:bg-gray-100 hover:bg-pink-50 transition-colors z-20 flex items-center justify-center shadow-xs cursor-pointer"
+          aria-label="Tutup"
         >
           <X className="w-5 h-5" />
         </button>

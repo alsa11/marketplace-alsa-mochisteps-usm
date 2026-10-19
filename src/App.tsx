@@ -34,12 +34,35 @@ import { OrderSuccessModal } from './components/OrderSuccessModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { InsoleGuideModal } from './components/InsoleGuideModal';
 import { WishlistDrawer } from './components/WishlistDrawer';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { Footer } from './components/Footer';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
+import { DeviceSimulatorBar, DeviceMode } from './components/DeviceSimulatorBar';
 import { Sparkles, ShieldCheck, Footprints, RefreshCw, Heart, ArrowRight, Search, Ruler, X } from 'lucide-react';
 
 export default function App() {
+  // Viewport Device Simulator State
+  const [previewDeviceMode, setPreviewDeviceMode] = useState<DeviceMode>('desktop');
+  const [isSimulatorCollapsed, setIsSimulatorCollapsed] = useState<boolean>(false);
+  const [isRealMobile, setIsRealMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsRealMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobileLayout = previewDeviceMode === 'mobile' || (previewDeviceMode === 'desktop' && isRealMobile);
+  const isTabletLayout = previewDeviceMode === 'tablet';
+
   // State
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -285,7 +308,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fff9fa] text-[#2d2226] flex flex-col font-sans selection:bg-pink-200 selection:text-pink-900">
+    <div className="min-h-screen bg-[#fff9fa] text-[#2d2226] flex flex-col font-sans selection:bg-pink-200 selection:text-pink-900 pb-20 md:pb-0 overflow-x-hidden">
       
       {/* Navbar */}
       <Navbar
@@ -465,7 +488,7 @@ export default function App() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
@@ -480,13 +503,11 @@ export default function App() {
         )}
       </section>
 
-
-
-      {/* Floating Cart Button for Quick Mobile Access */}
+      {/* Floating Cart Button for Quick Desktop Access */}
       {totalCartCount > 0 && (
         <button
           onClick={() => setIsCartOpen(true)}
-          className="fixed bottom-6 right-6 z-40 p-4 rounded-full bg-gradient-to-r from-[#d65b7d] via-[#e26d8d] to-[#be185d] text-white shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 group cursor-pointer"
+          className="hidden md:flex fixed bottom-6 right-6 z-40 p-4 rounded-full bg-gradient-to-r from-[#d65b7d] via-[#e26d8d] to-[#be185d] text-white shadow-2xl hover:scale-105 active:scale-95 transition-all items-center gap-2 group cursor-pointer"
         >
           <span className="font-heading font-extrabold text-xs">
             {totalCartCount} item di keranjang
@@ -599,6 +620,17 @@ export default function App() {
           setIsAdminLoggedIn(true);
           setIsAdminLoginModalOpen(false);
         }}
+      />
+
+      {/* Mobile Bottom Navigation Dock Bar (Floating for 1-hand mobile thumb reach) */}
+      <MobileBottomNav
+        cartCount={totalCartCount}
+        wishlistCount={wishlistIds.length}
+        onNavigateHome={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onNavigateKatalog={() => scrollToProducts()}
+        onOpenWishlist={() => setIsWishlistOpen(true)}
+        onOpenOrderTracking={() => setIsOrderTrackingOpen(true)}
+        onOpenCart={() => setIsCartOpen(true)}
       />
     </div>
   );

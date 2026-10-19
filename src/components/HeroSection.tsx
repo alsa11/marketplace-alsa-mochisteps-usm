@@ -34,12 +34,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1, duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 border border-pink-200 shadow-xs"
+              className="inline-flex items-center gap-2 px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-white/90 border border-pink-200 shadow-xs max-w-full overflow-hidden"
             >
-              <span className="w-2 h-2 rounded-full bg-[#d65b7d] animate-ping" />
-              <span className="text-xs font-semibold text-[#a63957] tracking-wide flex items-center gap-1.5 font-heading">
-                <Sparkles className="w-3.5 h-3.5 text-[#d65b7d]" />
-                Koleksi Baru: CloudMochi Insole 8mm
+              <span className="w-2 h-2 rounded-full bg-[#d65b7d] animate-ping shrink-0" />
+              <span className="text-[10px] sm:text-xs font-semibold text-[#a63957] tracking-wide flex items-center gap-1.5 font-heading truncate">
+                <Sparkles className="w-3.5 h-3.5 text-[#d65b7d] shrink-0" />
+                <span>Koleksi Baru: CloudMochi Insole 8mm</span>
               </span>
             </motion.div>
 
@@ -48,7 +48,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.7 }}
-              className="text-4xl sm:text-5xl lg:text-6xl font-extrabold font-heading text-[#2d1c24] leading-[1.15] tracking-tight"
+              className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold font-heading text-[#2d1c24] leading-[1.2] tracking-tight"
             >
               Langkah Cantik,{' '}
               <span className="relative inline-block text-transparent bg-clip-text bg-gradient-to-r from-[#d65b7d] via-[#e26d8d] to-[#be185d]">
