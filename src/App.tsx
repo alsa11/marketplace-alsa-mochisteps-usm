@@ -38,31 +38,9 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { Footer } from './components/Footer';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
-import { DeviceSimulatorBar, DeviceMode } from './components/DeviceSimulatorBar';
 import { Sparkles, ShieldCheck, Footprints, RefreshCw, Heart, ArrowRight, Search, Ruler, X } from 'lucide-react';
 
 export default function App() {
-  // Viewport Device Simulator State
-  const [previewDeviceMode, setPreviewDeviceMode] = useState<DeviceMode>('desktop');
-  const [isSimulatorCollapsed, setIsSimulatorCollapsed] = useState<boolean>(false);
-  const [isRealMobile, setIsRealMobile] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth < 768;
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsRealMobile(window.innerWidth < 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const isMobileLayout = previewDeviceMode === 'mobile' || (previewDeviceMode === 'desktop' && isRealMobile);
-  const isTabletLayout = previewDeviceMode === 'tablet';
-
   // State
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -336,14 +314,14 @@ export default function App() {
       />
 
       {/* 3 Keunggulan Mochi Cushion Highlights */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div className="p-6 rounded-3xl bg-white border border-pink-100/90 shadow-xs flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-[#fdf0f4] text-[#d65b7d] flex items-center justify-center shrink-0">
-              <Footprints className="w-6 h-6" />
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+          <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-pink-100/90 shadow-xs flex items-start gap-4">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#fdf0f4] text-[#d65b7d] flex items-center justify-center shrink-0">
+              <Footprints className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h3 className="font-heading font-bold text-base text-gray-900">
+              <h3 className="font-heading font-bold text-sm sm:text-base text-gray-900">
                 Busa CloudMochi 8mm
               </h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
@@ -352,12 +330,12 @@ export default function App() {
             </div>
           </div>
 
-          <div className="p-6 rounded-3xl bg-white border border-pink-100/90 shadow-xs flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-[#fdf0f4] text-[#d65b7d] flex items-center justify-center shrink-0">
-              <Heart className="w-6 h-6" />
+          <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-pink-100/90 shadow-xs flex items-start gap-4">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#fdf0f4] text-[#d65b7d] flex items-center justify-center shrink-0">
+              <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h3 className="font-heading font-bold text-base text-gray-900">
+              <h3 className="font-heading font-bold text-sm sm:text-base text-gray-900">
                 Lining Velvet Anti-Lecet
               </h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
@@ -366,12 +344,12 @@ export default function App() {
             </div>
           </div>
 
-          <div className="p-6 rounded-3xl bg-white border border-pink-100/90 shadow-xs flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-[#fdf0f4] text-[#d65b7d] flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-6 h-6" />
+          <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-pink-100/90 shadow-xs flex items-start gap-4">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#fdf0f4] text-[#d65b7d] flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h3 className="font-heading font-bold text-base text-gray-900">
+              <h3 className="font-heading font-bold text-sm sm:text-base text-gray-900">
                 Garansi Tukar Size 7 Hari
               </h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
@@ -383,26 +361,26 @@ export default function App() {
       </section>
 
       {/* Main Product Catalog Section */}
-      <section ref={productSectionRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full flex-1">
+      <section ref={productSectionRef} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-8 sm:py-12 w-full flex-1">
         
         {/* Section Header */}
-        <div className="flex flex-col gap-6 mb-8">
+        <div className="flex flex-col gap-4 sm:gap-6 mb-6 sm:mb-8">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-100/80 text-[#be185d] text-xs font-bold font-heading mb-2">
               <Sparkles className="w-3.5 h-3.5" />
               <span>12 Model Eksklusif • 3 Kategori</span>
             </div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold font-heading text-gray-900 tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-extrabold font-heading text-gray-900 tracking-tight">
               Koleksi Flatshoes Mochi Steps
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
               Foto asli real-life dengan pencahayaan lembut. Sentuh untuk melihat detail busa mochi.
             </p>
           </div>
 
-          {/* Catalog Controls: Semua Sepatu | Klasik | Pointed | Loafers, Search Bar, & Panduan Insole */}
-          <div className="bg-white p-3 sm:p-4 rounded-3xl border border-pink-200/80 shadow-2xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-            {/* Left: Semua Sepatu | Klasik | Pointed | Loafers */}
+          {/* Catalog Controls: Filter, Search Bar, & Panduan Insole */}
+          <div className="bg-white p-2.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-pink-200/80 shadow-2xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+            {/* Left: Filter Buttons (Scroll horizontal di mobile) */}
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 lg:pb-0">
               {[
                 { id: 'all', label: 'Semua Sepatu' },
@@ -414,7 +392,7 @@ export default function App() {
                   key={cat.id}
                   type="button"
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     selectedCategory === cat.id
                       ? 'bg-gradient-to-r from-[#d65b7d] to-[#be185d] text-white shadow-xs'
                       : 'bg-[#faf4f6] text-[#6b3d4a] hover:bg-pink-100/70 border border-pink-100'
@@ -426,7 +404,7 @@ export default function App() {
             </div>
 
             {/* Right: Search Bar “Cari flatshoes...” & Panduan Insole */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               {/* Search Bar */}
               <div className="relative flex-1 sm:w-64">
                 <input
@@ -452,7 +430,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsInsoleGuideOpen(true)}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold text-[#be185d] bg-pink-50 hover:bg-pink-100 transition-colors border border-pink-200 cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold text-[#be185d] bg-pink-50 hover:bg-pink-100 transition-colors border border-pink-200 cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
                 title="Panduan Ukuran Insole Busa Mochi 8mm"
               >
                 <Ruler className="w-3.5 h-3.5 text-[#be185d]" />
@@ -462,7 +440,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Product Grid */}
+        {/* Product Grid: 2 kolom compact di mobile (<640px), 3 kolom di tablet (md:), 4 kolom di desktop (lg:) */}
         {isLoadingInitial ? (
           <div className="py-20 text-center space-y-3">
             <div className="w-10 h-10 border-4 border-[#be185d] border-t-transparent rounded-full animate-spin mx-auto" />
@@ -488,7 +466,7 @@ export default function App() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}

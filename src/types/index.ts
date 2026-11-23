@@ -80,6 +80,22 @@ export interface OrderStatusHistoryItem {
   actor?: string;
 }
 
+export type ShipmentCheckpointStatus =
+  | 'info'
+  | 'pickup'
+  | 'transit'
+  | 'out_for_delivery'
+  | 'delivered';
+
+export interface ShipmentCheckpoint {
+  id: string;
+  title: string;
+  location: string;
+  description: string;
+  timestamp: string;
+  statusCode: ShipmentCheckpointStatus;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -96,6 +112,8 @@ export interface Order {
   courier: string;
   trackingNumber?: string; // Nomor Resi Pengiriman (J&T, SiCepat, dll)
   shippingDate?: string;
+  estimatedDelivery?: string; // Estimasi tanggal/rentang tiba kiriman
+  shipmentCheckpoints?: ShipmentCheckpoint[]; // Titik lokasi & riwayat perjalanan kurir
   paymentProofUrl?: string;
   stockRestored?: boolean; // Idempotency flag: prevents multiple stock restorations
   rejectionReason?: string; // Alasan penolakan pembayaran

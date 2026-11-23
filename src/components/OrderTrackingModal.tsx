@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X,
   Search,
@@ -7,21 +7,22 @@ import {
   CheckCircle2,
   PackageCheck,
   AlertCircle,
-  Phone,
   Package,
-  ShieldCheck,
   Copy,
   Check,
   MessageCircle,
   RefreshCw,
   Upload,
-  Image as ImageIcon,
   Eye,
   Star,
   Undo2,
   Calendar,
+  MapPin,
+  Navigation,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { Order, OrderStatus, OrderItem } from '../types';
+import { Order, OrderStatus, OrderItem, ShipmentCheckpoint, ShipmentCheckpointStatus } from '../types';
 import { FlatshoeImage } from './FlatshoeImage';
 import { cancelCustomerOrder, updateOrderPaymentProof, addCustomerReview, createOrderReturn } from '../lib/firestoreService';
 import { compressImageFile } from '../lib/imageUtils';
@@ -33,18 +34,200 @@ interface OrderTrackingModalProps {
   initialSearch?: string;
 }
 
+const maskPhone = (phone: string): string => {
+  const clean = phone.replace(/\s+/g, '');
+  if (clean.length <= 6) return clean;
+  return `${clean.slice(0, 4)}••••${clean.slice(-3)}`;
+};
+
+const formatTimestampId = (isoOrDateStr: string): string => {
+  const parsed = new Date(isoOrDateStr);
+  if (Number.isNaN(parsed.getTime())) return isoOrDateStr;
+  return parsed.toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const computeEstimatedArrival = (
+  order: Order
+): { label: string; sublabel: string; isDelivered: boolean; isCancelled: boolean } => {
+  if (order.orderStatus === 'Dibatalkan' || order.orderStatus === 'Ditolak') {
+    return {
+      label: 'Pengiriman Dibatalkan',
+      sublabel: order.rejectionReason || 'Pesanan tidak dilanjutkan ke kurir',
+      isDelivered: false,
+      isCancelled: true,
+    };
+  }
+
+  if (order.orderStatus === 'Selesai') {
+    const deliveredCp = order.shipmentCheckpoints?.find((c) => c.statusCode === 'delivered');
+    const deliveredAt = deliveredCp?.timestamp || order.updatedAt;
+    return {
+      label: 'Paket Telah Diterima',
+      sublabel: `Diterima pada ${formatTimestampId(deliveredAt)}`,
+      isDelivered: true,
+      isCancelled: false,
+    };
+  }
+
+  if (order.estimatedDelivery && order.estimatedDelivery.trim()) {
+    return {
+      label: order.estimatedDelivery.trim(),
+      sublabel: `Estimasi pengiriman via ${order.courier || 'Kurir Toko'}`,
+      isDelivered: false,
+      isCancelled: false,
+    };
+  }
+
+  if (order.orderStatus === 'Dikirim') {
+    const baseDateStr = order.shippingDate || order.updatedAt || order.createdAt;
+    const baseDate = new Date(baseDateStr);
+    if (!Number.isNaN(baseDate.getTime())) {
+      const minEta = new Date(baseDate);
+      minEta.setDate(minEta.getDate() + 2);
+      const maxEta = new Date(baseDate);
+      maxEta.setDate(maxEta.getDate() + 3);
+      const minText = minEta.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+      const maxText = maxEta.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+      return {
+        label: `${minText} – ${maxText}`,
+        sublabel: `Estimasi tiba 2–3 hari kerja (${order.courier || 'Kurir Reguler'})`,
+        isDelivered: false,
+        isCancelled: false,
+      };
+    }
+    return {
+      label: '2–3 Hari Kerja',
+      sublabel: `Dalam perjalanan bersama ${order.courier || 'Kurir Reguler'}`,
+      isDelivered: false,
+      isCancelled: false,
+    };
+  }
+
+  if (order.orderStatus === 'Menunggu Pembayaran' || order.orderStatus === 'Menunggu Verifikasi') {
+    return {
+      label: 'Menunggu Konfirmasi Pembayaran',
+      sublabel: 'Estimasi 2–3 hari kerja akan aktif setelah paket diserahkan ke kurir',
+      isDelivered: false,
+      isCancelled: false,
+    };
+  }
+
+  return {
+    label: 'Estimasi 2–3 Hari Kerja Setelah Dikirim',
+    sublabel: `Pesanan sedang disiapkan untuk diserahkan ke ${order.courier || 'Kurir Toko'}`,
+    isDelivered: false,
+    isCancelled: false,
+  };
+};
+
+const statusToCheckpointCode = (status: OrderStatus): ShipmentCheckpointStatus => {
+  if (status === 'Selesai') return 'delivered';
+  if (status === 'Dikirim') return 'pickup';
+  return 'info';
+};
+
+const buildTimelineCheckpoints = (order: Order): ShipmentCheckpoint[] => {
+  if (order.shipmentCheckpoints && order.shipmentCheckpoints.length > 0) {
+    return [...order.shipmentCheckpoints].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }
+
+  const destination = [order.district, order.city].filter(Boolean).join(', ') || 'Alamat Tujuan';
+  const courierName = order.courier || 'Kurir Reguler';
+  const derived: ShipmentCheckpoint[] = [];
+
+  if (order.statusHistory && order.statusHistory.length > 0) {
+    order.statusHistory.forEach((hist, idx) => {
+      let title = `Status: ${hist.status}`;
+      let location = 'Gudang Pusat Mochi Steps';
+      if (hist.status === 'Menunggu Pembayaran' || hist.status === 'Menunggu Verifikasi') {
+        title = 'Pesanan Diterima Sistem';
+      } else if (hist.status === 'Dibayar') {
+        title = 'Pembayaran Terkonfirmasi';
+      } else if (hist.status === 'Diproses' || hist.status === 'Disetujui') {
+        title = 'Pesanan Diverifikasi Tim';
+      } else if (hist.status === 'Dikemas') {
+        title = 'Paket Selesai Dikemas & Quality Check';
+      } else if (hist.status === 'Dikirim') {
+        title = `Paket Diserahkan ke ${courierName}`;
+        location = `Gerai Asal ${courierName}`;
+      } else if (hist.status === 'Selesai') {
+        title = 'Paket Diterima di Tujuan';
+        location = destination;
+      } else if (hist.status === 'Dibatalkan' || hist.status === 'Ditolak') {
+        title = `Pesanan ${hist.status}`;
+      }
+
+      derived.push({
+        id: `hist-${idx}`,
+        title,
+        location,
+        description: hist.notes || `Status pesanan diperbarui ke ${hist.status}.`,
+        timestamp: hist.timestamp,
+        statusCode: statusToCheckpointCode(hist.status),
+      });
+    });
+  } else {
+    derived.push({
+      id: 'created-init',
+      title: 'Pesanan Dibuat & Tercatat',
+      location: 'Sistem Mochi Steps',
+      description: `Pesanan #${order.orderNumber} berhasil dibuat menuju ${destination}.`,
+      timestamp: order.createdAt,
+      statusCode: 'info',
+    });
+
+    if (order.orderStatus === 'Dikirim' || order.orderStatus === 'Selesai') {
+      derived.push({
+        id: 'shipped-init',
+        title: `Paket Diserahkan ke ${courierName}`,
+        location: `Gerai Asal ${courierName}`,
+        description: order.trackingNumber
+          ? `Resi ${order.trackingNumber} diterbitkan dan paket dalam perjalanan menuju ${destination}.`
+          : `Paket dalam proses pengiriman menuju ${destination}.`,
+        timestamp: order.shippingDate || order.updatedAt || order.createdAt,
+        statusCode: 'pickup',
+      });
+    }
+
+    if (order.orderStatus === 'Selesai') {
+      derived.push({
+        id: 'delivered-init',
+        title: 'Paket Diterima di Tujuan',
+        location: destination,
+        description: `Kiriman telah tiba di ${destination} dan dinyatakan selesai.`,
+        timestamp: order.updatedAt || order.createdAt,
+        statusCode: 'delivered',
+      });
+    }
+  }
+
+  return derived.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+};
+
 export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   isOpen,
   onClose,
   orders,
   initialSearch = '',
 }) => {
-  const [orderNumberInput, setOrderNumberInput] = useState(initialSearch);
-  const [phoneInput, setPhoneInput] = useState('');
+  const [trackingQuery, setTrackingQuery] = useState(initialSearch);
   const [hasSearched, setHasSearched] = useState(false);
   const [matchedOrder, setMatchedOrder] = useState<Order | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedResi, setCopiedResi] = useState(false);
+  const [showInternalHistory, setShowInternalHistory] = useState(false);
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [proofUploadSuccess, setProofUploadSuccess] = useState<string | null>(null);
@@ -67,6 +250,71 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const [returnPhoto, setReturnPhoto] = useState<string | null>(null);
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [returnSuccessNotice, setReturnSuccessNotice] = useState<string | null>(null);
+
+  const findOrderByQuery = (rawQuery: string): Order | undefined => {
+    const cleanQuery = rawQuery.trim().replace(/^#/, '').toLowerCase();
+    if (!cleanQuery) return undefined;
+
+    return (
+      orders.find(
+        (o) =>
+          (o.trackingNumber && o.trackingNumber.trim().toLowerCase() === cleanQuery) ||
+          o.orderNumber.trim().toLowerCase() === cleanQuery ||
+          (o.receiptNumber && o.receiptNumber.trim().toLowerCase() === cleanQuery) ||
+          o.id.trim().toLowerCase() === cleanQuery
+      ) || undefined
+    );
+  };
+
+  const lastAutoSearchRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!isOpen) {
+      lastAutoSearchRef.current = '';
+      return;
+    }
+
+    const trimmed = initialSearch.trim();
+    if (trimmed && lastAutoSearchRef.current !== trimmed) {
+      setTrackingQuery(initialSearch);
+      if (orders.length === 0) return;
+
+      lastAutoSearchRef.current = trimmed;
+      const found = findOrderByQuery(initialSearch);
+      if (found) {
+        setMatchedOrder(found);
+        setErrorMessage(null);
+      } else {
+        setMatchedOrder(null);
+        setErrorMessage(
+          `Kiriman dengan nomor "${initialSearch}" belum ditemukan. Periksa kembali Nomor Resi atau Nomor Pesanan Anda.`
+        );
+      }
+      setHasSearched(true);
+    }
+  }, [isOpen, initialSearch, orders]);
+
+  // Real-time synchronization: keep matchedOrder synced with live Firestore stream
+  useEffect(() => {
+    if (matchedOrder) {
+      const liveOrder = orders.find(
+        (o) => o.id === matchedOrder.id || o.orderNumber.toLowerCase() === matchedOrder.orderNumber.toLowerCase()
+      );
+      if (liveOrder) {
+        setMatchedOrder(liveOrder);
+      }
+    }
+  }, [orders, matchedOrder?.id, matchedOrder?.orderNumber]);
+
+  const timelineCheckpoints = useMemo(() => {
+    if (!matchedOrder) return [];
+    return buildTimelineCheckpoints(matchedOrder);
+  }, [matchedOrder]);
+
+  const etaSummary = useMemo(() => {
+    if (!matchedOrder) return null;
+    return computeEstimatedArrival(matchedOrder);
+  }, [matchedOrder]);
 
   const handleUploadProof = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -160,24 +408,6 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     }
   };
 
-  useEffect(() => {
-    if (initialSearch) {
-      setOrderNumberInput(initialSearch);
-    }
-  }, [initialSearch]);
-
-  // Real-time synchronization: keep matchedOrder synced with live Firestore stream
-  useEffect(() => {
-    if (matchedOrder) {
-      const liveOrder = orders.find(
-        (o) => o.id === matchedOrder.id || o.orderNumber.toLowerCase() === matchedOrder.orderNumber.toLowerCase()
-      );
-      if (liveOrder) {
-        setMatchedOrder(liveOrder);
-      }
-    }
-  }, [orders, matchedOrder?.id, matchedOrder?.orderNumber]);
-
   if (!isOpen) return null;
 
   const formatRupiah = (num: number) => {
@@ -188,51 +418,27 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     }).format(num);
   };
 
-  const cleanPhone = (val: string) => {
-    let digits = val.replace(/[^0-9]/g, '');
-    if (digits.startsWith('62')) {
-      digits = '0' + digits.slice(2);
-    }
-    return digits;
-  };
-
-  const handleVerifyAndTrack = (e: React.FormEvent) => {
+  const handleTrackShipment = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanOrderNum = orderNumberInput.trim().toLowerCase();
-    const cleanUserPhone = cleanPhone(phoneInput.trim());
+    const cleaned = trackingQuery.trim();
 
-    if (!cleanOrderNum || !cleanUserPhone) {
-      setErrorMessage('Harap isi Nomor Pesanan dan Nomor WhatsApp Anda.');
+    if (!cleaned) {
+      setErrorMessage('Masukkan Nomor Resi pengiriman atau Nomor Pesanan Anda terlebih dahulu.');
       setMatchedOrder(null);
       setHasSearched(true);
       return;
     }
 
-    // Secure Verification: Both Order Number AND Phone Number must match!
-    const found = orders.find((o) => {
-      const matchNumber =
-        o.orderNumber.toLowerCase() === cleanOrderNum ||
-        o.id.toLowerCase() === cleanOrderNum ||
-        (o.receiptNumber && o.receiptNumber.toLowerCase() === cleanOrderNum);
-
-      const oPhoneClean = cleanPhone(o.customerPhone);
-      const matchPhone =
-        oPhoneClean.length >= 6 &&
-        cleanUserPhone.length >= 6 &&
-        (oPhoneClean === cleanUserPhone ||
-          oPhoneClean.endsWith(cleanUserPhone) ||
-          cleanUserPhone.endsWith(oPhoneClean));
-
-      return matchNumber && matchPhone;
-    });
+    const found = findOrderByQuery(cleaned);
 
     if (found) {
       setMatchedOrder(found);
       setErrorMessage(null);
+      setShowInternalHistory(false);
     } else {
       setMatchedOrder(null);
       setErrorMessage(
-        'Nomor pesanan dan nomor WhatsApp tidak cocok atau belum terdaftar di database toko. Mohon periksa kembali data pesanan Anda.'
+        'Nomor Resi atau Nomor Pesanan tidak ditemukan. Pastikan kode yang dimasukkan sudah benar tanpa spasi berlebih.'
       );
     }
     setHasSearched(true);
@@ -263,8 +469,21 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     { title: 'Selesai', desc: 'Diterima Pelanggan' },
   ];
 
+  const getCheckpointDotStyles = (statusCode: ShipmentCheckpointStatus, isLatest: boolean) => {
+    if (isLatest) {
+      if (statusCode === 'delivered') {
+        return 'bg-emerald-600 border-white ring-4 ring-emerald-100';
+      }
+      return 'bg-[#be185d] border-white ring-4 ring-pink-200';
+    }
+    return 'bg-gray-300 border-white ring-2 ring-gray-100';
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto"
+      onClick={onClose}
+    >
       <div
         className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-pink-100 p-4 sm:p-8 space-y-5 sm:space-y-6"
         onClick={(e) => e.stopPropagation()}
@@ -272,104 +491,122 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 sm:top-5 sm:right-5 w-9 h-9 sm:w-10 sm:h-10 rounded-full text-gray-400 hover:text-gray-700 bg-white/90 sm:bg-gray-100 hover:bg-pink-50 transition-colors z-20 flex items-center justify-center shadow-xs cursor-pointer"
+          className="absolute top-3 right-3 sm:top-5 sm:right-5 w-11 h-11 sm:w-10 sm:h-10 rounded-full text-gray-400 hover:text-gray-700 bg-white/95 sm:bg-gray-100 hover:bg-pink-50 transition-colors z-20 flex items-center justify-center shadow-xs cursor-pointer"
           aria-label="Tutup"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-center gap-3.5 border-b border-pink-100/80 pb-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#fbcfe8] to-[#fce7f3] flex items-center justify-center text-[#be185d] shadow-2xs">
+        <div className="flex items-center gap-3.5 border-b border-pink-100/80 pb-4 pr-10">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#fbcfe8] to-[#fce7f3] flex items-center justify-center text-[#be185d] shadow-2xs shrink-0">
             <Truck className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold font-heading text-gray-900">
-              Lacak Pesanan Flatshoes
+            <h2 className="text-xl sm:text-2xl font-bold font-heading text-gray-900 leading-tight">
+              Pelacak Kiriman &amp; Pesanan
             </h2>
-            <p className="text-xs text-gray-500">
-              Cek status live pesanan Anda secara aman tanpa login menggunakan Nomor Pesanan & Nomor HP.
+            <p className="text-xs text-gray-500 mt-0.5">
+              Pantau lokasi kurir, timeline perjalanan paket, dan estimasi sampai dengan Nomor Resi atau Nomor Pesanan.
             </p>
           </div>
         </div>
 
-        {/* Two-Field Verification Form */}
-        <form onSubmit={handleVerifyAndTrack} className="space-y-3 bg-pink-50/50 p-4 rounded-2xl border border-pink-200/60">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                1. Nomor Pesanan
-              </label>
+        {/* Single-Field Tracking Search Form */}
+        <form onSubmit={handleTrackShipment} className="space-y-2.5 bg-pink-50/50 p-3.5 sm:p-4 rounded-2xl border border-pink-200/70">
+          <label htmlFor="shipment-tracking-input" className="block text-xs font-bold text-gray-700">
+            Nomor Resi atau Nomor Pesanan
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
+                id="shipment-tracking-input"
                 type="text"
-                placeholder="Contoh: MCS-2026-1029..."
-                value={orderNumberInput}
-                onChange={(e) => setOrderNumberInput(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-pink-200 bg-white text-xs font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-pink-300"
+                placeholder="Contoh: MCS-2026-1029 atau JNT12345678"
+                value={trackingQuery}
+                onChange={(e) => setTrackingQuery(e.target.value)}
+                className="w-full min-h-[44px] pl-10 pr-9 py-2.5 rounded-xl border border-pink-200 bg-white text-xs sm:text-sm font-mono font-bold text-gray-900 placeholder:font-sans placeholder:font-normal placeholder:text-gray-400 focus:outline-hidden focus:ring-2 focus:ring-pink-300"
               />
+              {trackingQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTrackingQuery('');
+                    setErrorMessage(null);
+                    setHasSearched(false);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center cursor-pointer"
+                  aria-label="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                2. Nomor WhatsApp / HP Pembeli
-              </label>
-              <input
-                type="tel"
-                placeholder="Contoh: 0819456732451"
-                value={phoneInput}
-                onChange={(e) => setPhoneInput(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-pink-200 bg-white text-xs font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-pink-300"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
-            <span className="text-[11px] text-gray-400 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Verifikasi privasi pesanan terjaga</span>
-            </span>
 
             <button
               type="submit"
-              className="w-full sm:w-auto py-2.5 px-5 rounded-xl bg-gradient-to-r from-[#d65b7d] to-[#be185d] text-white font-bold text-xs shadow-xs hover:brightness-105 transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[42px]"
+              className="w-full sm:w-auto min-h-[44px] py-2.5 px-5 rounded-xl bg-gradient-to-r from-[#d65b7d] to-[#be185d] text-white font-bold text-xs sm:text-sm shadow-xs hover:brightness-105 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
             >
-              <Search className="w-3.5 h-3.5" />
-              <span>Verifikasi & Lacak Pesanan</span>
+              <Navigation className="w-4 h-4" />
+              <span>Lacak Kiriman</span>
             </button>
           </div>
         </form>
+
+        {/* Empty Initial Guidance when no order matched yet */}
+        {!matchedOrder && !errorMessage && (
+          <div className="p-4 sm:p-5 bg-[#fffbfc] rounded-2xl border border-pink-100 text-xs text-gray-600 flex items-start gap-3">
+            <Package className="w-5 h-5 text-[#be185d] shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-gray-900">Cara Melacak Paket Mochi Steps</p>
+              <p className="leading-relaxed text-gray-500">
+                Masukkan <span className="font-semibold text-gray-700">Nomor Pesanan</span> (contoh:{' '}
+                <span className="font-mono text-gray-700">MCS-...</span>) atau{' '}
+                <span className="font-semibold text-gray-700">Nomor Resi Ekspedisi</span> dari konfirmasi checkout untuk melihat posisi kurir dan estimasi tanggal tiba secara langsung.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Error / Not Found Alert */}
         {errorMessage && hasSearched && (
           <div className="p-4 bg-red-50 rounded-2xl border border-red-200 text-xs text-red-800 flex items-start gap-2.5 animate-fade-in">
             <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-bold">Pesanan Tidak Ditemukan</p>
+              <p className="font-bold">Kiriman Tidak Ditemukan</p>
               <p className="text-[11px] text-red-700 mt-0.5">{errorMessage}</p>
             </div>
           </div>
         )}
 
         {/* Matched Order Details */}
-        {matchedOrder && (
+        {matchedOrder && etaSummary && (
           <div className="space-y-5 animate-fade-in">
             {/* Header Status Bar */}
             <div className="p-4 bg-[#fffbfc] rounded-2xl border border-pink-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-gray-400 block">Nomor Pesanan</span>
-                <span className="font-mono font-extrabold text-base text-[#be185d]">
+              <div className="space-y-0.5">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block">
+                  Nomor Pesanan
+                </span>
+                <span className="font-mono tabular-nums font-extrabold text-base text-[#be185d]">
                   {matchedOrder.orderNumber}
                 </span>
                 <p className="text-[11px] text-gray-500">
-                  Dipesan pada: {new Date(matchedOrder.createdAt).toLocaleString('id-ID', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
+                  {matchedOrder.customerName} · {maskPhone(matchedOrder.customerPhone)} · Dipesan{' '}
+                  <span className="tabular-nums">
+                    {new Date(matchedOrder.createdAt).toLocaleString('id-ID', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </span>
                 </p>
               </div>
 
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-gray-400 block">Status Pesanan</span>
+              <div className="sm:text-right">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block mb-1">
+                  Status Saat Ini
+                </span>
                 <span
                   className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
                     matchedOrder.orderStatus === 'Dibatalkan' || matchedOrder.orderStatus === 'Ditolak'
@@ -384,10 +621,110 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               </div>
             </div>
 
+            {/* Estimasi Sampai (ETA) & Info Kurir Highlight Card */}
+            <div
+              className={`p-4 sm:p-5 rounded-2xl border space-y-3.5 ${
+                etaSummary.isCancelled
+                  ? 'bg-red-50/70 border-red-200'
+                  : etaSummary.isDelivered
+                  ? 'bg-emerald-50/70 border-emerald-200'
+                  : 'bg-gradient-to-br from-pink-50/80 via-white to-rose-50/60 border-pink-200'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      etaSummary.isCancelled
+                        ? 'bg-red-100 text-red-700'
+                        : etaSummary.isDelivered
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-[#be185d] text-white'
+                    }`}
+                  >
+                    {etaSummary.isDelivered ? (
+                      <PackageCheck className="w-5 h-5" />
+                    ) : etaSummary.isCancelled ? (
+                      <AlertCircle className="w-5 h-5" />
+                    ) : (
+                      <Clock className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500 block">
+                      Estimasi Sampai
+                    </span>
+                    <p
+                      className={`text-base sm:text-lg font-extrabold leading-snug tabular-nums ${
+                        etaSummary.isCancelled
+                          ? 'text-red-800'
+                          : etaSummary.isDelivered
+                          ? 'text-emerald-800'
+                          : 'text-[#be185d]'
+                      }`}
+                    >
+                      {etaSummary.label}
+                    </p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">{etaSummary.sublabel}</p>
+                  </div>
+                </div>
+
+                {/* Resi Copy Block */}
+                <div className="sm:text-right border-t sm:border-t-0 border-pink-200/60 pt-2.5 sm:pt-0">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block">
+                    Nomor Resi
+                  </span>
+                  {matchedOrder.trackingNumber ? (
+                    <div className="flex items-center sm:justify-end gap-1.5 mt-0.5">
+                      <span className="font-mono tabular-nums font-extrabold text-sm text-gray-900 bg-white px-2.5 py-1 rounded-lg border border-pink-200">
+                        {matchedOrder.trackingNumber}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(matchedOrder.trackingNumber || '');
+                          setCopiedResi(true);
+                          setTimeout(() => setCopiedResi(false), 2000);
+                        }}
+                        className="min-w-[38px] min-h-[38px] rounded-lg bg-white border border-pink-200 text-gray-600 hover:text-[#be185d] hover:border-pink-300 flex items-center justify-center cursor-pointer transition-colors"
+                        title="Salin Nomor Resi"
+                        aria-label="Salin Nomor Resi"
+                      >
+                        {copiedResi ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">Menunggu penerbitan resi</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Clean unboxed shipping metadata strip */}
+              <div className="pt-2.5 border-t border-pink-200/60 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-600">
+                <span className="inline-flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5 text-[#be185d]" />
+                  <strong className="text-gray-900">{matchedOrder.courier || 'Kurir Reguler Toko'}</strong>
+                </span>
+                {matchedOrder.shippingDate && (
+                  <span className="inline-flex items-center gap-1.5 tabular-nums">
+                    <Calendar className="w-3.5 h-3.5 text-[#be185d]" />
+                    <span>Dikirim: {matchedOrder.shippingDate}</span>
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-[#be185d]" />
+                  <span>
+                    Tujuan: {[matchedOrder.district, matchedOrder.city].filter(Boolean).join(', ') || 'Indonesia'}
+                    {matchedOrder.postalCode ? ` ${matchedOrder.postalCode}` : ''}
+                  </span>
+                </span>
+              </div>
+            </div>
+
             {/* Stepper Progress Bar */}
             <div className="bg-pink-50/40 p-4 rounded-2xl border border-pink-100 space-y-3">
-              <span className="text-xs font-bold text-gray-700 block">Alur Status Live Pesanan:</span>
-              
+              <span className="text-xs font-bold text-gray-700 block">Alur Tahapan Pesanan:</span>
+
               {matchedOrder.orderStatus === 'Dibatalkan' || matchedOrder.orderStatus === 'Ditolak' ? (
                 <div className="p-4 bg-red-50 text-red-900 rounded-2xl border border-red-200 text-xs space-y-1.5">
                   <div className="flex items-center gap-1.5 font-bold text-red-800">
@@ -403,7 +740,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-6 gap-1 text-center">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-y-3 gap-x-1.5 text-center">
                   {stepsList.map((st, idx) => {
                     const isPassed = currentStep >= idx;
                     const isCurrent = currentStep === idx;
@@ -431,7 +768,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                         >
                           {st.title}
                         </span>
-                        <span className="text-[8px] text-gray-400 hidden sm:block">
+                        <span className="text-[9px] text-gray-400 hidden sm:block mt-0.5">
                           {st.desc}
                         </span>
                       </div>
@@ -441,76 +778,100 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               )}
             </div>
 
-            {/* Courier & Tracking Number Card with Shipping Date */}
-            <div className="p-4 bg-white rounded-2xl border border-pink-100 shadow-2xs space-y-2 text-xs">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div>
-                  <span className="text-gray-500 block">Jasa Ekspedisi:</span>
-                  <span className="font-bold text-gray-900">{matchedOrder.courier || 'Kurir Reguler Toko'}</span>
-                </div>
-
-                {matchedOrder.shippingDate && (
-                  <div>
-                    <span className="text-gray-500 block">Tanggal Pengiriman:</span>
-                    <span className="font-bold text-gray-800 flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-pink-600" />
-                      <span>{matchedOrder.shippingDate}</span>
-                    </span>
-                  </div>
-                )}
-
-                <div>
-                  <span className="text-gray-500 block">Nomor Resi Pengiriman:</span>
-                  {matchedOrder.trackingNumber ? (
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-extrabold text-sm text-gray-900 bg-gray-100 px-2.5 py-0.5 rounded-lg border border-gray-200">
-                        {matchedOrder.trackingNumber}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(matchedOrder.trackingNumber || '');
-                          setCopiedResi(true);
-                          setTimeout(() => setCopiedResi(false), 2000);
-                        }}
-                        className="p-1 text-gray-500 hover:text-[#be185d] cursor-pointer"
-                        title="Salin Resi"
-                      >
-                        {copiedResi ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-gray-400 italic">Sedang disiapkan oleh tim gudang</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Riwayat Perubahan Status Pesanan (Audit Trail History) */}
-            {matchedOrder.statusHistory && matchedOrder.statusHistory.length > 0 && (
-              <div className="p-4 bg-white rounded-2xl border border-pink-100 shadow-2xs space-y-2.5 text-xs">
-                <span className="font-bold text-gray-800 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-[#be185d]" />
-                  <span>Riwayat Perjalanan & Status Pesanan:</span>
+            {/* Live Timeline Titik Lokasi Kurir */}
+            <div className="p-4 sm:p-5 bg-white rounded-2xl border border-pink-100 shadow-2xs space-y-3.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-[#be185d]" />
+                  <span>Timeline Titik Lokasi Kurir</span>
                 </span>
-                <div className="space-y-3 border-l-2 border-pink-200 pl-3.5 ml-2 pt-1">
-                  {matchedOrder.statusHistory.map((hist, idx) => (
-                    <div key={idx} className="relative space-y-0.5">
-                      <div className="absolute -left-[20px] top-1 w-2.5 h-2.5 rounded-full bg-[#be185d] border-2 border-white ring-2 ring-pink-200" />
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-gray-900 text-xs">{hist.status}</span>
-                        <span className="text-[10px] text-gray-400 font-mono">
-                          {new Date(hist.timestamp).toLocaleString('id-ID')}
+                <span className="text-[11px] font-mono tabular-nums text-gray-400">
+                  {timelineCheckpoints.length} titik tercatat
+                </span>
+              </div>
+
+              <div className="relative space-y-4 border-l-2 border-pink-200 pl-4 ml-2 pt-1">
+                {timelineCheckpoints.map((cp, idx) => {
+                  const isLatest = idx === 0;
+                  return (
+                    <div key={cp.id || idx} className="relative space-y-1">
+                      <div
+                        className={`absolute -left-[22px] top-1 w-3 h-3 rounded-full border-2 ${getCheckpointDotStyles(
+                          cp.statusCode,
+                          isLatest
+                        )}`}
+                      />
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
+                        <span
+                          className={`font-bold text-xs sm:text-[13px] ${
+                            isLatest
+                              ? cp.statusCode === 'delivered'
+                                ? 'text-emerald-800'
+                                : 'text-[#be185d]'
+                              : 'text-gray-800'
+                          }`}
+                        >
+                          {cp.title}
+                        </span>
+                        <span className="text-[11px] text-gray-400 font-mono tabular-nums shrink-0">
+                          {formatTimestampId(cp.timestamp)}
                         </span>
                       </div>
-                      {hist.notes && (
-                        <p className="text-[11px] text-gray-600 leading-relaxed font-sans">{hist.notes}</p>
+
+                      <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-600">
+                        <Navigation className="w-3 h-3 text-pink-500 shrink-0" />
+                        <span>{cp.location}</span>
+                      </div>
+
+                      {cp.description && (
+                        <p className="text-[11px] text-gray-500 leading-relaxed">{cp.description}</p>
                       )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            )}
+
+              {/* Optional toggle for raw internal status log when custom courier checkpoints exist */}
+              {matchedOrder.shipmentCheckpoints &&
+                matchedOrder.shipmentCheckpoints.length > 0 &&
+                matchedOrder.statusHistory &&
+                matchedOrder.statusHistory.length > 0 && (
+                  <div className="pt-2 border-t border-pink-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowInternalHistory((prev) => !prev)}
+                      className="text-[11px] font-semibold text-gray-500 hover:text-[#be185d] flex items-center gap-1 cursor-pointer min-h-[32px]"
+                    >
+                      {showInternalHistory ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                      <span>
+                        {showInternalHistory ? 'Sembunyikan' : 'Lihat'} log status pesanan ({matchedOrder.statusHistory.length})
+                      </span>
+                    </button>
+
+                    {showInternalHistory && (
+                      <div className="mt-2.5 space-y-2 border-l-2 border-gray-200 pl-3 ml-1.5">
+                        {[...matchedOrder.statusHistory]
+                          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                          .map((hist, idx) => (
+                            <div key={idx} className="text-[11px] space-y-0.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold text-gray-700">{hist.status}</span>
+                                <span className="text-[10px] text-gray-400 font-mono tabular-nums">
+                                  {formatTimestampId(hist.timestamp)}
+                                </span>
+                              </div>
+                              {hist.notes && <p className="text-gray-500">{hist.notes}</p>}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+            </div>
 
             {/* Product Items Details with Photos */}
             <div className="space-y-2.5">

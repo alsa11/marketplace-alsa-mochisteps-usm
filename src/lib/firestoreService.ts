@@ -27,6 +27,8 @@ import {
   ProductReview,
   OrderReturn,
   OrderStatusHistoryItem,
+  ShipmentCheckpoint,
+  ShipmentCheckpointStatus,
 } from '../types';
 
 export const INITIAL_PRODUCTS: Omit<Product, 'id'>[] = [
@@ -398,6 +400,10 @@ export function subscribeToOrders(
           discountAmount: d.discountAmount !== undefined ? Number(d.discountAmount) : 0,
           receiptNumber: d.receiptNumber || undefined,
           trackingNumber: d.trackingNumber || undefined,
+          shippingDate: d.shippingDate || undefined,
+          estimatedDelivery: d.estimatedDelivery || undefined,
+          shipmentCheckpoints: Array.isArray(d.shipmentCheckpoints) ? d.shipmentCheckpoints : undefined,
+          statusHistory: Array.isArray(d.statusHistory) ? d.statusHistory : undefined,
           paymentProofUrl: d.paymentProofUrl || undefined,
           stockRestored: !!d.stockRestored,
           rejectionReason: d.rejectionReason || undefined,
@@ -848,10 +854,43 @@ export async function updateOrderStatus(orderId: string, orderStatus: OrderStatu
   const now = new Date().toISOString();
   const orderRef = doc(db, 'orders', orderId);
   try {
-    await updateDoc(orderRef, {
+    const snap = await getDoc(orderRef);
+    const orderData = snap.data() as Order | undefined;
+    const currentHistory = Array.isArray(orderData?.statusHistory) ? orderData!.statusHistory! : [];
+    const currentCheckpoints = Array.isArray(orderData?.shipmentCheckpoints)
+      ? orderData!.shipmentCheckpoints!
+      : [];
+
+    const newHistoryItem: OrderStatusHistoryItem = {
+      status: orderStatus,
+      timestamp: now,
+      notes: `Status pesanan diperbarui menjadi ${orderStatus}`,
+      actor: 'Admin',
+    };
+
+    const payload: Record<string, any> = {
       orderStatus,
       updatedAt: now,
-    });
+      statusHistory: [...currentHistory, newHistoryItem],
+    };
+
+    if (orderStatus === 'Selesai') {
+      const hasDelivered = currentCheckpoints.some((cp) => cp.statusCode === 'delivered');
+      if (!hasDelivered) {
+        const destCity = orderData?.city || 'Alamat Tujuan';
+        const deliveredCheckpoint: ShipmentCheckpoint = {
+          id: `cp-${Date.now()}`,
+          title: 'Paket Telah Diterima Pelanggan',
+          location: destCity,
+          description: 'Pengiriman selesai dan paket telah diterima di alamat tujuan.',
+          timestamp: now,
+          statusCode: 'delivered',
+        };
+        payload.shipmentCheckpoints = [...currentCheckpoints, deliveredCheckpoint];
+      }
+    }
+
+    await updateDoc(orderRef, payload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
   }
@@ -1356,14 +1395,15 @@ export async function recordStockOpname(params: {
   }
 }
 
-// Update Order Tracking Details & Status with Courier and Shipping Date
+// Update Order Tracking Details & Status with Courier, Shipping Date, and ETA
 export async function updateOrderTracking(
   orderId: string,
   trackingNumber: string,
   courier?: string,
   shippingDate?: string,
   status?: OrderStatus,
-  actor: string = 'Admin Logistik'
+  actor: string = 'Admin Logistik',
+  estimatedDelivery?: string
 ): Promise<void> {
   const now = new Date().toISOString();
   const orderRef = doc(db, 'orders', orderId);
@@ -1371,28 +1411,117 @@ export async function updateOrderTracking(
   try {
     const snap = await getDoc(orderRef);
     const orderData = snap.data() as Order | undefined;
-    const currentHistory = orderData?.statusHistory || [];
+    const currentHistory = Array.isArray(orderData?.statusHistory) ? orderData!.statusHistory! : [];
+    const currentCheckpoints = Array.isArray(orderData?.shipmentCheckpoints)
+      ? orderData!.shipmentCheckpoints!
+      : [];
+
+    const cleanResi = trackingNumber.trim();
+    const resolvedCourier = (courier && courier.trim()) || orderData?.courier || 'Kurir Toko';
+    const resolvedShippingDate = shippingDate || orderData?.shippingDate || now.slice(0, 10);
 
     const newHistoryItem: OrderStatusHistoryItem = {
       status: status || orderData?.orderStatus || 'Dikirim',
       timestamp: now,
-      notes: `Resi ${trackingNumber.trim()}${courier ? ` via ${courier}` : ''}${shippingDate ? ` (${shippingDate})` : ''}`,
+      notes: `Resi ${cleanResi} via ${resolvedCourier}${resolvedShippingDate ? ` (${resolvedShippingDate})` : ''}`,
       actor,
     };
 
-    const updatePayload: Record<string, any> = {
-      trackingNumber: trackingNumber.trim(),
-      updatedAt: now,
-      statusHistory: [...currentHistory, newHistoryItem],
+    const newCheckpoint: ShipmentCheckpoint = {
+      id: `cp-${Date.now()}`,
+      title: cleanResi
+        ? `Paket Diserahkan ke ${resolvedCourier}`
+        : 'Nomor Resi & Pengiriman Diperbarui',
+      location: 'Gudang Mochi Steps (Jakarta)',
+      description: cleanResi
+        ? `Nomor resi ${cleanResi} diterbitkan. Paket dipickup oleh kurir ${resolvedCourier}.`
+        : `Kurir ${resolvedCourier} ditetapkan untuk pengiriman.`,
+      timestamp: now,
+      statusCode: 'pickup',
     };
 
-    if (courier) updatePayload.courier = courier;
-    if (shippingDate) updatePayload.shippingDate = shippingDate;
+    const updatePayload: Record<string, any> = {
+      trackingNumber: cleanResi,
+      courier: resolvedCourier,
+      shippingDate: resolvedShippingDate,
+      updatedAt: now,
+      statusHistory: [...currentHistory, newHistoryItem],
+      shipmentCheckpoints: [...currentCheckpoints, newCheckpoint],
+    };
+
     if (status) updatePayload.orderStatus = status;
+    if (estimatedDelivery !== undefined && estimatedDelivery.trim()) {
+      updatePayload.estimatedDelivery = estimatedDelivery.trim();
+    }
 
     await updateDoc(orderRef, updatePayload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}/tracking`);
+    throw error;
+  }
+}
+
+// Add a Courier Location Checkpoint to an Order's Shipment Timeline
+export async function addShipmentCheckpoint(
+  orderId: string,
+  checkpoint: {
+    title: string;
+    location: string;
+    description: string;
+    statusCode: ShipmentCheckpointStatus;
+  },
+  options?: {
+    estimatedDelivery?: string;
+    orderStatus?: OrderStatus;
+    actor?: string;
+  }
+): Promise<ShipmentCheckpoint> {
+  const now = new Date().toISOString();
+  const orderRef = doc(db, 'orders', orderId);
+
+  try {
+    const snap = await getDoc(orderRef);
+    const orderData = snap.data() as Order | undefined;
+    const currentCheckpoints = Array.isArray(orderData?.shipmentCheckpoints)
+      ? orderData!.shipmentCheckpoints!
+      : [];
+    const currentHistory = Array.isArray(orderData?.statusHistory) ? orderData!.statusHistory! : [];
+
+    const newCheckpoint: ShipmentCheckpoint = {
+      id: `cp-${Date.now()}`,
+      title: checkpoint.title.trim(),
+      location: checkpoint.location.trim(),
+      description: checkpoint.description.trim(),
+      timestamp: now,
+      statusCode: checkpoint.statusCode,
+    };
+
+    const updatePayload: Record<string, any> = {
+      shipmentCheckpoints: [...currentCheckpoints, newCheckpoint],
+      updatedAt: now,
+    };
+
+    if (options?.estimatedDelivery && options.estimatedDelivery.trim()) {
+      updatePayload.estimatedDelivery = options.estimatedDelivery.trim();
+    }
+
+    if (options?.orderStatus) {
+      updatePayload.orderStatus = options.orderStatus;
+      updatePayload.statusHistory = [
+        ...currentHistory,
+        {
+          status: options.orderStatus,
+          timestamp: now,
+          notes: `${newCheckpoint.title} (${newCheckpoint.location})`,
+          actor: options.actor || 'Admin Logistik',
+        },
+      ];
+    }
+
+    await updateDoc(orderRef, updatePayload);
+    return newCheckpoint;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}/checkpoint`);
     throw error;
   }
 }

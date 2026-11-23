@@ -16,7 +16,6 @@ interface NavbarProps {
   onNavigateKatalog: () => void;
   isFirestoreConnected: boolean;
   storeSettings?: StoreSettings;
-  isMobileLayout?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,7 +31,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateKatalog,
   isFirestoreConnected,
   storeSettings,
-  isMobileLayout = false,
 }) => {
   const [clickCount, setClickCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -129,7 +127,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Menu di tengah: Beranda | Kategori | Katalog | Lacak Pesanan (Desktop) */}
-          <nav className={isMobileLayout ? "hidden" : "hidden md:flex items-center gap-1 lg:gap-2"}>
+          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
             {navMenuItems.map((item) => (
               <button
                 key={item.id}
@@ -149,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onOpenWishlist}
-              className={`${isMobileLayout ? 'hidden' : 'hidden sm:flex'} relative p-2.5 rounded-full text-[#6b3d4a] hover:text-[#be185d] hover:bg-pink-50 transition-all cursor-pointer items-center justify-center border border-pink-100/60 min-w-[44px] min-h-[44px]`}
+              className="hidden sm:flex relative p-2.5 rounded-full text-[#6b3d4a] hover:text-[#be185d] hover:bg-pink-50 transition-all cursor-pointer items-center justify-center border border-pink-100/60 min-w-[44px] min-h-[44px]"
               aria-label="Wishlist Sepatu"
               title="Buka Wishlist Sepatu Favorit"
             >
@@ -165,7 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onOpenCart}
-              className={`${isMobileLayout ? 'hidden' : 'hidden sm:flex'} relative p-2.5 rounded-full text-[#6b3d4a] hover:text-[#be185d] hover:bg-pink-50 transition-all cursor-pointer items-center justify-center border border-pink-100/60 min-w-[44px] min-h-[44px]`}
+              className="hidden sm:flex relative p-2.5 rounded-full text-[#6b3d4a] hover:text-[#be185d] hover:bg-pink-50 transition-all cursor-pointer items-center justify-center border border-pink-100/60 min-w-[44px] min-h-[44px]"
               aria-label="Keranjang Belanja"
               title="Buka Keranjang Belanja"
             >
@@ -185,15 +183,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Akses Admin Mochi Steps"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-[#be185d]" />
-              <span className={isMobileLayout ? "hidden" : "hidden sm:inline"}>Admin MochiSteps</span>
-              <span className={isMobileLayout ? "text-[11px]" : "sm:hidden text-[11px]"}>Admin</span>
+              <span className="hidden sm:inline">Admin MochiSteps</span>
+              <span className="sm:hidden text-[11px]">Admin</span>
             </button>
 
             {/* Mobile Menu Hamburger */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`${isMobileLayout ? 'flex' : 'md:hidden flex'} p-2 rounded-xl text-gray-700 hover:bg-pink-50 cursor-pointer min-w-[40px] min-h-[40px] items-center justify-center`}
+              className="md:hidden p-2 rounded-xl text-gray-700 hover:bg-pink-50 cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
               aria-label="Buka Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -203,7 +201,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Mobile Navigation Dropdown */}
         {mobileMenuOpen && (
-          <div className={`${isMobileLayout ? 'block' : 'md:hidden'} py-4 border-t border-pink-100 space-y-2 animate-fade-in`}>
+          <div className="md:hidden py-4 border-t border-pink-100 space-y-2 animate-fade-in">
             {navMenuItems.map((item) => {
               const Icon = item.icon;
               return (

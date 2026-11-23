@@ -10,7 +10,6 @@ interface MobileBottomNavProps {
   onOpenWishlist: () => void;
   onOpenOrderTracking: () => void;
   onOpenCart: () => void;
-  isSimulatedMobile?: boolean;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -21,16 +20,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenWishlist,
   onOpenOrderTracking,
   onOpenCart,
-  isSimulatedMobile = false,
 }) => {
   return (
     <nav
       aria-label="Navigasi Mobile"
-      className={
-        isSimulatedMobile
-          ? "sticky bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-pink-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all shrink-0"
-          : "fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-pink-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] md:hidden transition-all"
-      }
+      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-pink-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] md:hidden transition-all"
     >
       <div className="max-w-md mx-auto px-2 py-1.5 flex items-center justify-around">
         {/* Beranda */}
