@@ -56,6 +56,7 @@ import {
   ProductReview,
   OrderReturn,
   ShipmentCheckpointStatus,
+  LookbookItem,
 } from '../../types';
 import {
   approvePayment,
@@ -96,6 +97,7 @@ interface AdminPortalProps {
   vouchers?: Voucher[];
   reviews?: ProductReview[];
   returns?: OrderReturn[];
+  lookbookItems?: LookbookItem[];
   isMobileLayout?: boolean;
 }
 
@@ -124,6 +126,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   vouchers = [],
   reviews = [],
   returns = [],
+  lookbookItems = [],
   isMobileLayout = false,
 }) => {
   // Navigation State - Default to Dashboard
@@ -688,7 +691,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     { id: 'vouchers', label: '9. Voucher Promo', icon: Tag, count: vouchers.length },
     {
       id: 'reviews',
-      label: '10. Moderasi Ulasan',
+      label: '10. Testimoni & Lookbook',
       icon: MessageSquare,
       count: reviews.filter((r) => !r.isApproved).length || undefined,
       badgeColor: 'bg-amber-500 text-white',
@@ -2315,10 +2318,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           />
         )}
 
-        {/* ================= 10. MODERASI ULASAN ================= */}
+        {/* ================= 10. TESTIMONI & LOOKBOOK ================= */}
         {activeTab === 'reviews' && (
           <ReviewManager
             reviews={reviews}
+            lookbookItems={lookbookItems}
+            products={products}
+            orders={orders}
             onShowToast={showApprovalToast}
           />
         )}

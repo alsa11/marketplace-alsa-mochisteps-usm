@@ -77,5 +77,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Lookbook Styling Gallery
+    match /lookbook_items/{itemId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

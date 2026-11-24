@@ -238,6 +238,11 @@ export interface Voucher {
   createdAt?: string;
 }
 
+export type FitFeedbackOption =
+  | 'Pas di Kaki'
+  | 'Agak Sempit (Naik 1 Size)'
+  | 'Agak Longgar';
+
 export interface ProductReview {
   id: string;
   productId: string;
@@ -249,8 +254,31 @@ export interface ProductReview {
   comment: string;
   photoUrl?: string;
   size?: number;
+  fitFeedback?: FitFeedbackOption;
+  featuredInGallery?: boolean;
   isApproved: boolean;
   createdAt: string;
+}
+
+export type LookbookOccasion =
+  | 'Kantor & Formal'
+  | 'Santai & Hangout'
+  | 'Kuliah & Harian'
+  | 'Acara Spesial';
+
+export interface LookbookItem {
+  id: string;
+  title: string;
+  occasion: LookbookOccasion;
+  imageUrl: string;
+  productId: string;
+  productName: string;
+  wornSize: number;
+  fitNote: string;
+  stylingTip: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OrderReturn {

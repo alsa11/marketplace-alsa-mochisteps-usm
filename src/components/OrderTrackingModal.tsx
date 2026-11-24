@@ -22,7 +22,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { Order, OrderStatus, OrderItem, ShipmentCheckpoint, ShipmentCheckpointStatus } from '../types';
+import { Order, OrderStatus, OrderItem, ShipmentCheckpoint, ShipmentCheckpointStatus, FitFeedbackOption } from '../types';
 import { FlatshoeImage } from './FlatshoeImage';
 import { cancelCustomerOrder, updateOrderPaymentProof, addCustomerReview, createOrderReturn } from '../lib/firestoreService';
 import { compressImageFile } from '../lib/imageUtils';
@@ -239,6 +239,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const [reviewRating, setReviewRating] = useState<number>(5);
   const [reviewComment, setReviewComment] = useState<string>('');
   const [reviewPhoto, setReviewPhoto] = useState<string | null>(null);
+  const [reviewFitFeedback, setReviewFitFeedback] = useState<FitFeedbackOption>('Pas di Kaki');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSuccessNotice, setReviewSuccessNotice] = useState<string | null>(null);
 
@@ -356,6 +357,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
         comment: reviewComment.trim(),
         photoUrl: reviewPhoto || undefined,
         size: selectedReviewItem.size,
+        fitFeedback: reviewFitFeedback,
       });
 
       setReviewSuccessNotice('Terima kasih! Ulasan bintang Anda telah berhasil dikirim dan tersimpan.');
@@ -365,6 +367,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
         setSelectedReviewItem(null);
         setReviewComment('');
         setReviewPhoto(null);
+        setReviewFitFeedback('Pas di Kaki');
       }, 2500);
     } catch (e: any) {
       alert('Gagal mengirim ulasan: ' + (e?.message || 'Error'));
@@ -1247,6 +1250,31 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                   <span className="text-xs font-bold text-amber-600 ml-2">
                     {reviewRating} dari 5 Bintang
                   </span>
+                </div>
+              </div>
+
+              {/* Kesan Ukuran / Fit Feedback */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  Kesan Ukuran EU {selectedReviewItem.size} (Membantu Pembeli Lain):
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  {(['Pas di Kaki', 'Agak Sempit (Naik 1 Size)', 'Agak Longgar'] as FitFeedbackOption[]).map(
+                    (opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setReviewFitFeedback(opt)}
+                        className={`min-h-[40px] px-2.5 py-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+                          reviewFitFeedback === opt
+                            ? 'border-[#be185d] bg-pink-50 text-[#be185d]'
+                            : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
 

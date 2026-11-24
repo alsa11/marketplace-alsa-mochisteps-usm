@@ -29,7 +29,16 @@ import {
   OrderStatusHistoryItem,
   ShipmentCheckpoint,
   ShipmentCheckpointStatus,
+  LookbookItem,
 } from '../types';
+import lookbookOfficeImg from '../assets/images/lookbook_office_classic_1795515787484.jpg';
+import lookbookCasualImg from '../assets/images/lookbook_casual_hangout_1795515788109.jpg';
+import lookbookCampusImg from '../assets/images/lookbook_campus_maryjane_1795515788484.jpg';
+import lookbookEveningImg from '../assets/images/lookbook_evening_pointed_1795515788253.jpg';
+import reviewBallerinaImg from '../assets/images/review_buyer_ballerina_1795516496857.jpg';
+import reviewPointedImg from '../assets/images/review_buyer_pointed_1795516498006.jpg';
+import reviewLoafersImg from '../assets/images/review_buyer_loafers_1795516499158.jpg';
+import reviewSliponImg from '../assets/images/review_buyer_pastel_slipon_1795516499062.jpg';
 
 export const INITIAL_PRODUCTS: Omit<Product, 'id'>[] = [
   {
@@ -1749,17 +1758,473 @@ export async function deleteVoucher(id: string): Promise<void> {
 // ==========================================
 // 3. ULASAN PEMBELI (VERIFIED BUYER REVIEWS)
 // ==========================================
+export const INITIAL_SEED_REVIEWS: ProductReview[] = [
+  {
+    id: 'seed-rev-01-a',
+    productId: 'mochi-flat-01',
+    productName: 'Mochi Peach Puff Ribbon',
+    orderId: 'seed-ord-01a',
+    orderNumber: 'MCS-2026-8801',
+    customerName: 'Nadia Putri',
+    rating: 5,
+    comment: 'Warnanya peach pastel lembut persis di foto, pita depannya rapi banget dan empuk dipakai jalan dari stasiun ke kantor tanpa lecet.',
+    photoUrl: lookbookOfficeImg,
+    size: 38,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-18T09:30:00.000Z',
+  },
+  {
+    id: 'seed-rev-01-b',
+    productId: 'mochi-flat-01',
+    productName: 'Mochi Peach Puff Ribbon',
+    orderId: 'seed-ord-01b',
+    orderNumber: 'MCS-2026-8802',
+    customerName: 'Rani Kusuma',
+    rating: 5,
+    comment: 'Busa CloudMochi-nya benar-benar berasa empuk di tumit. Kaki saya 23.5 cm ambil size 37 langsung pas nyaman.',
+    photoUrl: '/shoes/mochi-flat-01.jpg',
+    size: 37,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-15T14:20:00.000Z',
+  },
+  {
+    id: 'seed-rev-02-a',
+    productId: 'mochi-flat-02',
+    productName: 'Daisy Cloud Butter Flats',
+    orderId: 'seed-ord-02a',
+    orderNumber: 'MCS-2026-8803',
+    customerName: 'Clarissa Amanda',
+    rating: 5,
+    comment: 'Dipakai nongkrong seharian ke kafe sama rok denim manis banget. Ringan dan nggak bikin kaki berkeringat.',
+    photoUrl: lookbookCasualImg,
+    size: 37,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-19T11:10:00.000Z',
+  },
+  {
+    id: 'seed-rev-02-b',
+    productId: 'mochi-flat-02',
+    productName: 'Daisy Cloud Butter Flats',
+    orderId: 'seed-ord-02b',
+    orderNumber: 'MCS-2026-8804',
+    customerName: 'Siti Aulia',
+    rating: 4,
+    comment: 'Warna vanilla butter-nya netral masuk ke semua baju. Untuk kaki punggung agak tinggi, naik ke 39 lebih lega.',
+    photoUrl: '/shoes/mochi-flat-02.jpg',
+    size: 39,
+    fitFeedback: 'Agak Sempit (Naik 1 Size)',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-14T16:45:00.000Z',
+  },
+  {
+    id: 'seed-rev-03-a',
+    productId: 'mochi-flat-03',
+    productName: 'Strawberry Pearl Mary Jane',
+    orderId: 'seed-ord-03a',
+    orderNumber: 'MCS-2026-8805',
+    customerName: 'Firda Rahmawati',
+    rating: 5,
+    comment: 'Strap mutiaranya bikin tampil super gemas ala kuliah! Saya pakai ukuran 39 sama kaus kaki tipis masih pas.',
+    photoUrl: lookbookCampusImg,
+    size: 39,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-20T08:15:00.000Z',
+  },
+  {
+    id: 'seed-rev-03-b',
+    productId: 'mochi-flat-03',
+    productName: 'Strawberry Pearl Mary Jane',
+    orderId: 'seed-ord-03b',
+    orderNumber: 'MCS-2026-8806',
+    customerName: 'Keisha Wijaya',
+    rating: 5,
+    comment: 'Cocok buat kaki mungil yang sering copot pakai flatshoes biasa karena ada tali Mary Jane-nya. Empuk banget!',
+    photoUrl: '/shoes/mochi-flat-03.jpg',
+    size: 36,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-12T13:00:00.000Z',
+  },
+  {
+    id: 'seed-rev-04-a',
+    productId: 'mochi-flat-04',
+    productName: 'Caramel Bear Cloud Ballerina',
+    orderId: 'seed-ord-04a',
+    orderNumber: 'MCS-2026-8807',
+    customerName: 'Dinda Permata',
+    rating: 5,
+    comment: 'Warna karamelnya kalem dan gampang dipaduin dengan celana krem. Bantalan belakangnya lembut nggak bikin tumit sakit.',
+    photoUrl: reviewBallerinaImg,
+    size: 38,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-21T10:25:00.000Z',
+  },
+  {
+    id: 'seed-rev-04-b',
+    productId: 'mochi-flat-04',
+    productName: 'Caramel Bear Cloud Ballerina',
+    orderId: 'seed-ord-04b',
+    orderNumber: 'MCS-2026-8808',
+    customerName: 'Mega Pratiwi',
+    rating: 5,
+    comment: 'Kaki saya ukuran 40 lebar, kulit vegan-nya lentur mengikuti bentuk kaki jadi tetap nyaman dipakai nyetir maupun jalan.',
+    photoUrl: '/shoes/mochi-flat-04.jpg',
+    size: 40,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-11T17:10:00.000Z',
+  },
+  {
+    id: 'seed-rev-05-a',
+    productId: 'mochi-flat-05',
+    productName: 'Sakura Blossom Pointed',
+    orderId: 'seed-ord-05a',
+    orderNumber: 'MCS-2026-8809',
+    customerName: 'Tania Oktaviani',
+    rating: 5,
+    comment: 'Dipakai ke acara kondangan malam kelihatan mewah tapi kaki bebas pegal! Bros sakuranya berkilau halus.',
+    photoUrl: lookbookEveningImg,
+    size: 38,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-22T12:05:00.000Z',
+  },
+  {
+    id: 'seed-rev-05-b',
+    productId: 'mochi-flat-05',
+    productName: 'Sakura Blossom Pointed',
+    orderId: 'seed-ord-05b',
+    orderNumber: 'MCS-2026-8810',
+    customerName: 'Bella Maharani',
+    rating: 4,
+    comment: 'Model pointed-nya bikin kaki terlihat jenjang. Kaki saya agak lebar jadi pesan 40 dan pas banget di jari.',
+    photoUrl: '/shoes/mochi-flat-05.jpg',
+    size: 40,
+    fitFeedback: 'Agak Sempit (Naik 1 Size)',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-10T15:30:00.000Z',
+  },
+  {
+    id: 'seed-rev-06-a',
+    productId: 'mochi-flat-06',
+    productName: 'Lilac Fairy Star Pointed',
+    orderId: 'seed-ord-06a',
+    orderNumber: 'MCS-2026-8811',
+    customerName: 'Vina Anggraini',
+    rating: 5,
+    comment: 'Warna lilac pastelnya manis banget buat ke kantor, kena cahaya ruangan kelihatan elegan dan tetap sopan.',
+    photoUrl: reviewPointedImg,
+    size: 38,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-21T15:40:00.000Z',
+  },
+  {
+    id: 'seed-rev-06-b',
+    productId: 'mochi-flat-06',
+    productName: 'Lilac Fairy Star Pointed',
+    orderId: 'seed-ord-06b',
+    orderNumber: 'MCS-2026-8812',
+    customerName: 'Larasati Dewi',
+    rating: 5,
+    comment: 'Sudah kena gerimis tipis tetap gampang dilap karena bahannya halus. Ukuran 37 pas di kaki ramping saya.',
+    photoUrl: '/shoes/mochi-flat-06.jpg',
+    size: 37,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-09T11:20:00.000Z',
+  },
+  {
+    id: 'seed-rev-07-a',
+    productId: 'mochi-flat-07',
+    productName: 'Boba Pearl Milk Tea Pointed',
+    orderId: 'seed-ord-07a',
+    orderNumber: 'MCS-2026-8813',
+    customerName: 'Shinta Kartika',
+    rating: 5,
+    comment: 'Warna milk tea cream-nya bikin kulit kaki cerah! Mutiara di depannya terjahit kuat, aman dipakai meeting seharian.',
+    photoUrl: '/shoes/mochi-flat-07.jpg',
+    size: 39,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-17T09:50:00.000Z',
+  },
+  {
+    id: 'seed-rev-07-b',
+    productId: 'mochi-flat-07',
+    productName: 'Boba Pearl Milk Tea Pointed',
+    orderId: 'seed-ord-07b',
+    orderNumber: 'MCS-2026-8814',
+    customerName: 'Intan Lestari',
+    rating: 5,
+    comment: 'Suka banget sama insole latex-nya yang membal. Size 41 tersedia dan muat nyaman untuk kaki panjang 25.5 cm.',
+    photoUrl: '/shoes/mochi-flat-07.jpg',
+    size: 41,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-08T18:10:00.000Z',
+  },
+  {
+    id: 'seed-rev-08-a',
+    productId: 'mochi-flat-08',
+    productName: 'Matcha Sweet Pistachio Pointed',
+    orderId: 'seed-ord-08a',
+    orderNumber: 'MCS-2026-8815',
+    customerName: 'Hana Safira',
+    rating: 5,
+    comment: 'Warna hijau matcha-nya unik dan fresh banget! Solnya lentur ditekuk tidak kaku sama sekali.',
+    photoUrl: '/shoes/mochi-flat-08.jpg',
+    size: 38,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-16T14:00:00.000Z',
+  },
+  {
+    id: 'seed-rev-08-b',
+    productId: 'mochi-flat-08',
+    productName: 'Matcha Sweet Pistachio Pointed',
+    orderId: 'seed-ord-08b',
+    orderNumber: 'MCS-2026-8816',
+    customerName: 'Mutiara Zahra',
+    rating: 4,
+    comment: 'Warnanya pastel lembut sesuai ekspektasi. Bagian ujung agak meruncing jadi saran saya naik 1 size kalau kaki lebar.',
+    photoUrl: '/shoes/mochi-flat-08.jpg',
+    size: 39,
+    fitFeedback: 'Agak Sempit (Naik 1 Size)',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-07T10:40:00.000Z',
+  },
+  {
+    id: 'seed-rev-09-a',
+    productId: 'mochi-flat-09',
+    productName: 'Choco Marshmallow Penny Loafers',
+    orderId: 'seed-ord-09a',
+    orderNumber: 'MCS-2026-8817',
+    customerName: 'Ayu Wulandari',
+    rating: 5,
+    comment: 'Loafer favorit saya buat kerja! Dipakai sama jeans maupun celana bahan keren, kulitnya lembut dan bantalannya empuk banget.',
+    photoUrl: reviewLoafersImg,
+    size: 39,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-22T09:15:00.000Z',
+  },
+  {
+    id: 'seed-rev-09-b',
+    productId: 'mochi-flat-09',
+    productName: 'Choco Marshmallow Penny Loafers',
+    orderId: 'seed-ord-09b',
+    orderNumber: 'MCS-2026-8818',
+    customerName: 'Niken Laras',
+    rating: 5,
+    comment: 'Modelnya klasik rapi tapi nggak kaku kayak loafer kulit biasa. Size 38 pas dan nggak sakit di punggung kaki.',
+    photoUrl: '/shoes/mochi-flat-09.jpg',
+    size: 38,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-06T16:00:00.000Z',
+  },
+  {
+    id: 'seed-rev-10-a',
+    productId: 'mochi-flat-10',
+    productName: 'Vanilla Cream Bow Loafers',
+    orderId: 'seed-ord-10a',
+    orderNumber: 'MCS-2026-8819',
+    customerName: 'Gita Amelia',
+    rating: 5,
+    comment: 'Pita simpulnya bikin loafer terlihat lebih feminin. Bantalan tumit velvet-nya bikin jalan jauh tetap adem.',
+    photoUrl: '/shoes/mochi-flat-10.jpg',
+    size: 37,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-15T11:30:00.000Z',
+  },
+  {
+    id: 'seed-rev-10-b',
+    productId: 'mochi-flat-10',
+    productName: 'Vanilla Cream Bow Loafers',
+    orderId: 'seed-ord-10b',
+    orderNumber: 'MCS-2026-8820',
+    customerName: 'Putri Melati',
+    rating: 5,
+    comment: 'Ringan banget buat dibawa traveling. Kalau tanpa kaus kaki terasa sedikit lega di saya, enak ditambah heel pad tipis.',
+    photoUrl: '/shoes/mochi-flat-10.jpg',
+    size: 40,
+    fitFeedback: 'Agak Longgar',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-05T13:45:00.000Z',
+  },
+  {
+    id: 'seed-rev-11-a',
+    productId: 'mochi-flat-11',
+    productName: 'Taro Velvet Cloud Slip-on',
+    orderId: 'seed-ord-11a',
+    orderNumber: 'MCS-2026-8821',
+    customerName: 'Yuni Kartika',
+    rating: 5,
+    comment: 'Tinggal slup langsung jalan! Quilting taro-nya lembut banget di punggung kaki dan sol karetnya nggak licin.',
+    photoUrl: reviewSliponImg,
+    size: 38,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: true,
+    isApproved: true,
+    createdAt: '2026-11-23T08:40:00.000Z',
+  },
+  {
+    id: 'seed-rev-11-b',
+    productId: 'mochi-flat-11',
+    productName: 'Taro Velvet Cloud Slip-on',
+    orderId: 'seed-ord-11b',
+    orderNumber: 'MCS-2026-8822',
+    customerName: 'Citra Kirana',
+    rating: 5,
+    comment: 'Belikan buat ibu ukuran 41 dan langsung dipakai jalan pagi karena empuk dan ringan sekali.',
+    photoUrl: '/shoes/mochi-flat-11.jpg',
+    size: 41,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-04T09:20:00.000Z',
+  },
+  {
+    id: 'seed-rev-12-a',
+    productId: 'mochi-flat-12',
+    productName: 'Cotton Candy Pastel Loafers',
+    orderId: 'seed-ord-12a',
+    orderNumber: 'MCS-2026-8823',
+    customerName: 'Elsa Veronica',
+    rating: 5,
+    comment: 'Perpaduan pastel pink & biru lembutnya lucu banget! Sudah dipakai ngajar di kelas seharian kaki tetap nyaman.',
+    photoUrl: '/shoes/mochi-flat-12.jpg',
+    size: 36,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-18T17:25:00.000Z',
+  },
+  {
+    id: 'seed-rev-12-b',
+    productId: 'mochi-flat-12',
+    productName: 'Cotton Candy Pastel Loafers',
+    orderId: 'seed-ord-12b',
+    orderNumber: 'MCS-2026-8824',
+    customerName: 'Nabila Hasanah',
+    rating: 5,
+    comment: 'Bahan suede microfiber-nya halus dan jahitannya rapi. Size 39 sesuai panduan insole 24.5 cm.',
+    photoUrl: '/shoes/mochi-flat-12.jpg',
+    size: 39,
+    fitFeedback: 'Pas di Kaki',
+    featuredInGallery: false,
+    isApproved: true,
+    createdAt: '2026-11-03T15:15:00.000Z',
+  },
+];
+
+export async function seedReviewsIfEmpty(products: Product[] = []): Promise<void> {
+  const reviewsCol = collection(db, 'reviews');
+  try {
+    const seededFlag =
+      typeof window !== 'undefined' ? localStorage.getItem('mochi_reviews_seeded_v1') : null;
+    if (seededFlag) return;
+
+    let resolvedProducts = products;
+    if (resolvedProducts.length === 0) {
+      const prodsSnap = await getDocs(collection(db, 'products'));
+      resolvedProducts = prodsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Product));
+    }
+
+    const snapshot = await getDocs(reviewsCol);
+    const existingProductIds = new Set<string>();
+    const existingProductNames = new Set<string>();
+    const existingDocIds = new Set<string>();
+
+    snapshot.docs.forEach((d) => {
+      existingDocIds.add(d.id);
+      const data = d.data() as Partial<ProductReview>;
+      if (data.productId) existingProductIds.add(data.productId);
+      if (data.productName) existingProductNames.add(data.productName.toLowerCase());
+    });
+
+    const batch = writeBatch(db);
+    let pendingWrites = 0;
+
+    for (const seed of INITIAL_SEED_REVIEWS) {
+      const matchedProd =
+        resolvedProducts.find((p) => p.id === seed.productId) ||
+        resolvedProducts.find((p) => p.name.toLowerCase() === seed.productName.toLowerCase());
+      const resolvedProductId = matchedProd ? matchedProd.id : seed.productId;
+      const resolvedProductName = matchedProd ? matchedProd.name : seed.productName;
+
+      const alreadyHasProductReview =
+        existingProductIds.has(resolvedProductId) ||
+        existingProductNames.has(resolvedProductName.toLowerCase());
+
+      if (!alreadyHasProductReview && !existingDocIds.has(seed.id)) {
+        const revRef = doc(db, 'reviews', seed.id);
+        batch.set(revRef, {
+          ...seed,
+          productId: resolvedProductId,
+          productName: resolvedProductName,
+        });
+        pendingWrites++;
+      }
+    }
+
+    if (pendingWrites > 0) {
+      await batch.commit();
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('mochi_reviews_seeded_v1', '1');
+    }
+  } catch (error) {
+    console.warn('Reviews seeding note:', error);
+  }
+}
+
 export function subscribeToReviews(callback: (reviews: ProductReview[]) => void) {
   const reviewsCol = collection(db, 'reviews');
   return onSnapshot(
     reviewsCol,
     (snapshot) => {
+      const seededFlag =
+        typeof window !== 'undefined' ? localStorage.getItem('mochi_reviews_seeded_v1') : null;
+      if (snapshot.empty && !seededFlag) {
+        callback(INITIAL_SEED_REVIEWS);
+        return;
+      }
       const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as ProductReview));
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       callback(list);
     },
     (error) => {
       console.warn('Reviews subscription note:', error);
-      callback([]);
+      callback(INITIAL_SEED_REVIEWS);
     }
   );
 }
@@ -1770,12 +2235,17 @@ export async function addCustomerReview(
   const now = new Date().toISOString();
   const rRef = doc(collection(db, 'reviews'));
   try {
-    await setDoc(rRef, {
+    const payload: Record<string, any> = {
       ...data,
       id: rRef.id,
+      featuredInGallery: Boolean(data.featuredInGallery),
       isApproved: true,
       createdAt: now,
+    };
+    Object.keys(payload).forEach((k) => {
+      if (payload[k] === undefined) delete payload[k];
     });
+    await setDoc(rRef, payload);
     return rRef.id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, 'reviews');
@@ -1787,6 +2257,16 @@ export async function moderateReview(reviewId: string, isApproved: boolean): Pro
   const rRef = doc(db, 'reviews', reviewId);
   try {
     await updateDoc(rRef, { isApproved });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `reviews/${reviewId}`);
+    throw error;
+  }
+}
+
+export async function toggleReviewFeatured(reviewId: string, featuredInGallery: boolean): Promise<void> {
+  const rRef = doc(db, 'reviews', reviewId);
+  try {
+    await updateDoc(rRef, { featuredInGallery });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `reviews/${reviewId}`);
     throw error;
@@ -1911,10 +2391,170 @@ export async function updateReturnStatusAndRestoreStock(
 }
 
 // ==========================================
-// 5. BACKUP & PEMELIHARAAN DATABASE (JSON EXPORT)
+// 5. GALERI LOOKBOOK GAYA (CURATED STYLING)
+// ==========================================
+export const DEFAULT_LOOKBOOK_ITEMS: Omit<LookbookItem, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    title: 'Smart Office Beige & Peach Ribbon',
+    occasion: 'Kantor & Formal',
+    imageUrl: lookbookOfficeImg,
+    productId: 'mochi-flat-01',
+    productName: 'Mochi Peach Puff Ribbon',
+    wornSize: 38,
+    fitNote: 'Pas di kaki standar (Panjang kaki 24.0 cm)',
+    stylingTip: 'Padukan celana ankle beige dengan Mochi Peach Puff Ribbon untuk tampilan rapi yang tetap empuk berdiri seharian.',
+    isActive: true,
+  },
+  {
+    title: 'Weekend Cafe Denim & Butter Flats',
+    occasion: 'Santai & Hangout',
+    imageUrl: lookbookCasualImg,
+    productId: 'mochi-flat-02',
+    productName: 'Daisy Cloud Butter Flats',
+    wornSize: 37,
+    fitNote: 'Pas di kaki ramping (Panjang kaki 23.4 cm)',
+    stylingTip: 'Rok midi denim kasual makin manis dipasangkan dengan siluet ballerina warna vanilla butter yang ringan.',
+    isActive: true,
+  },
+  {
+    title: 'Campus Preppy Mary Jane Pearl',
+    occasion: 'Kuliah & Harian',
+    imageUrl: lookbookCampusImg,
+    productId: 'mochi-flat-03',
+    productName: 'Strawberry Pearl Mary Jane',
+    wornSize: 39,
+    fitNote: 'Naik 1 size jika dipakai bersama kaus kaki tipis',
+    stylingTip: 'Tampil feminin ala mahasiswi dengan rok lipit krem, kaus kaki sheer, dan strap mutiara Mary Jane yang aman anti-lepas.',
+    isActive: true,
+  },
+  {
+    title: 'Golden Hour Silk & Sakura Pointed',
+    occasion: 'Acara Spesial',
+    imageUrl: lookbookEveningImg,
+    productId: 'mochi-flat-05',
+    productName: 'Sakura Blossom Pointed',
+    wornSize: 38,
+    fitNote: 'Ujung pointed lega, pas di ukuran normal',
+    stylingTip: 'Cocok untuk kondangan atau makan malam resmi tanpa pegal hak tinggi berkat bantalan CloudMochi 8mm.',
+    isActive: true,
+  },
+];
+
+export function subscribeToLookbook(callback: (items: LookbookItem[]) => void) {
+  const lbCol = collection(db, 'lookbook_items');
+  return onSnapshot(
+    lbCol,
+    (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as LookbookItem));
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    },
+    (error) => {
+      console.warn('Lookbook subscription note:', error);
+      const now = new Date().toISOString();
+      callback(
+        DEFAULT_LOOKBOOK_ITEMS.map((item, idx) => ({
+          ...item,
+          id: `default-lb-${idx + 1}`,
+          createdAt: now,
+          updatedAt: now,
+        }))
+      );
+    }
+  );
+}
+
+export async function seedLookbookIfEmpty(products: Product[] = []): Promise<void> {
+  const lbCol = collection(db, 'lookbook_items');
+  try {
+    const seededFlag = typeof window !== 'undefined' ? localStorage.getItem('mochi_lookbook_seeded_v1') : null;
+    if (seededFlag) return;
+
+    const snapshot = await getDocs(lbCol);
+    if (!snapshot.empty) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('mochi_lookbook_seeded_v1', '1');
+      }
+      return;
+    }
+
+    const now = new Date().toISOString();
+    for (let i = 0; i < DEFAULT_LOOKBOOK_ITEMS.length; i++) {
+      const item = DEFAULT_LOOKBOOK_ITEMS[i];
+      const matchedProd =
+        products.find((p) => p.id === item.productId) ||
+        products.find((p) => p.name.toLowerCase() === item.productName.toLowerCase());
+      const docId = `lookbook-${String(i + 1).padStart(2, '0')}`;
+      const lbRef = doc(db, 'lookbook_items', docId);
+      await setDoc(lbRef, {
+        ...item,
+        productId: matchedProd ? matchedProd.id : item.productId,
+        productName: matchedProd ? matchedProd.name : item.productName,
+        id: docId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('mochi_lookbook_seeded_v1', '1');
+    }
+  } catch (error) {
+    console.warn('Lookbook seeding note:', error);
+  }
+}
+
+export async function addLookbookItem(
+  data: Omit<LookbookItem, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> {
+  const now = new Date().toISOString();
+  const lbRef = doc(collection(db, 'lookbook_items'));
+  try {
+    await setDoc(lbRef, {
+      ...data,
+      id: lbRef.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return lbRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'lookbook_items');
+    throw error;
+  }
+}
+
+export async function updateLookbookItem(
+  id: string,
+  data: Partial<Omit<LookbookItem, 'id' | 'createdAt'>>
+): Promise<void> {
+  const now = new Date().toISOString();
+  const lbRef = doc(db, 'lookbook_items', id);
+  try {
+    await updateDoc(lbRef, {
+      ...data,
+      updatedAt: now,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `lookbook_items/${id}`);
+    throw error;
+  }
+}
+
+export async function deleteLookbookItem(id: string): Promise<void> {
+  const lbRef = doc(db, 'lookbook_items', id);
+  try {
+    await deleteDoc(lbRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `lookbook_items/${id}`);
+    throw error;
+  }
+}
+
+// ==========================================
+// 6. BACKUP & PEMELIHARAAN DATABASE (JSON EXPORT)
 // ==========================================
 export async function exportDatabaseBackup(): Promise<string> {
-  const [prodsSnap, ordersSnap, settingsSnap, vouchersSnap, reviewsSnap, returnsSnap, mutationsSnap] =
+  const [prodsSnap, ordersSnap, settingsSnap, vouchersSnap, reviewsSnap, returnsSnap, mutationsSnap, lookbookSnap] =
     await Promise.all([
       getDocs(collection(db, 'products')),
       getDocs(collection(db, 'orders')),
@@ -1923,6 +2563,7 @@ export async function exportDatabaseBackup(): Promise<string> {
       getDocs(collection(db, 'reviews')),
       getDocs(collection(db, 'returns')),
       getDocs(collection(db, 'stock_mutations')),
+      getDocs(collection(db, 'lookbook_items')),
     ]);
 
   const backupData = {
@@ -1935,6 +2576,7 @@ export async function exportDatabaseBackup(): Promise<string> {
       reviewsCount: reviewsSnap.size,
       returnsCount: returnsSnap.size,
       mutationsCount: mutationsSnap.size,
+      lookbookCount: lookbookSnap.size,
     },
     products: prodsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     orders: ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
@@ -1943,6 +2585,7 @@ export async function exportDatabaseBackup(): Promise<string> {
     reviews: reviewsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     returns: returnsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     mutations: mutationsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    lookbook_items: lookbookSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
   };
 
   return JSON.stringify(backupData, null, 2);

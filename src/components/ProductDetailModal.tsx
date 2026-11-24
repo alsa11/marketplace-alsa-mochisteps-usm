@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Star,
@@ -11,7 +11,7 @@ import {
   Sparkles,
   Heart,
   CheckCircle2,
-  Image as ImageIcon,
+  Eye,
 } from 'lucide-react';
 import { Product, ProductReview } from '../types';
 import { FlatshoeImage } from './FlatshoeImage';
@@ -37,18 +37,44 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onToggleWishlist,
   reviews = [],
 }) => {
-  if (!product) return null;
-
-  const [selectedSize, setSelectedSize] = useState<number>(() => {
-    // Pick first size that has stock > 0
-    if (product.sizeStock) {
-      const available = product.sizes.find((s) => (product.sizeStock?.[s] || 0) > 0);
-      if (available) return available;
-    }
-    return product.sizes[2] || 38;
-  });
+  const [selectedSize, setSelectedSize] = useState<number>(38);
   const [quantity, setQuantity] = useState<number>(1);
   const [isAdded, setIsAdded] = useState(false);
+  const [zoomedReviewPhoto, setZoomedReviewPhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!product) return;
+    setQuantity(1);
+    setZoomedReviewPhoto(null);
+    if (product.sizeStock) {
+      const available = product.sizes.find((s) => (product.sizeStock?.[s] || 0) > 0);
+      if (available) {
+        setSelectedSize(available);
+        return;
+      }
+    }
+    setSelectedSize(product.sizes[2] || product.sizes[0] || 38);
+  }, [product?.id]);
+
+  const productReviews = useMemo(() => {
+    if (!product) return [];
+    const prodNameLower = product.name.toLowerCase();
+    return reviews.filter(
+      (r) =>
+        r.isApproved &&
+        (r.productId === product.id || r.productName?.toLowerCase() === prodNameLower)
+    );
+  }, [reviews, product]);
+
+  const fitSummaryText = useMemo(() => {
+    const withFit = productReviews.filter((r) => Boolean(r.fitFeedback));
+    if (withFit.length === 0) return null;
+    const pasCount = withFit.filter((r) => r.fitFeedback === 'Pas di Kaki').length;
+    const pct = Math.round((pasCount / withFit.length) * 100);
+    return `${pct}% pembeli menilai pas di ukuran normal`;
+  }, [productReviews]);
+
+  if (!product) return null;
 
   const formatRupiah = (num: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -318,24 +344,31 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
         {/* Customer Reviews Section */}
         <div className="mt-8 pt-6 border-t border-pink-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-              <h3 className="font-heading font-extrabold text-base text-gray-900">
-                Ulasan Pembeli Terverifikasi
-              </h3>
-              <span className="text-xs font-semibold text-gray-500">
-                ({reviews.filter((r) => r.productId === product.id && r.isApproved).length})
-              </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                <h3 className="font-heading font-extrabold text-base text-gray-900">
+                  Ulasan Pembeli Terverifikasi
+                </h3>
+                <span className="text-xs font-semibold text-gray-500 tabular-nums">
+                  ({productReviews.length})
+                </span>
+              </div>
+              {fitSummaryText && (
+                <p className="text-[11px] font-medium text-emerald-700 pl-7">
+                  {fitSummaryText}
+                </p>
+              )}
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs text-amber-600 font-bold bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 font-semibold self-start sm:self-auto">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>100% Pembelian Nyata</span>
+              <span>100% Pembelian Terverifikasi</span>
             </div>
           </div>
 
-          {reviews.filter((r) => r.productId === product.id && r.isApproved).length === 0 ? (
+          {productReviews.length === 0 ? (
             <div className="p-6 rounded-2xl bg-gray-50 border border-gray-200 text-center space-y-1">
               <p className="font-bold text-xs text-gray-700">Belum ada ulasan untuk model sepatu ini</p>
               <p className="text-[11px] text-gray-500 max-w-sm mx-auto">
@@ -344,49 +377,90 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {reviews
-                .filter((r) => r.productId === product.id && r.isApproved)
-                .map((rev) => (
-                  <div key={rev.id} className="p-4 rounded-2xl bg-pink-50/40 border border-pink-100 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-pink-200 text-[#be185d] font-bold text-xs flex items-center justify-center">
-                          {rev.customerName.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-bold text-xs text-gray-900">{rev.customerName}</p>
-                          <p className="text-[10px] text-gray-400">
-                            {new Date(rev.createdAt).toLocaleDateString('id-ID')}
-                            {rev.size ? ` • Ukuran EU ${rev.size}` : ''}
-                          </p>
-                        </div>
+              {productReviews.map((rev) => (
+                <div key={rev.id} className="p-4 rounded-2xl bg-pink-50/40 border border-pink-100 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-pink-200 text-[#be185d] font-bold text-xs flex items-center justify-center shrink-0">
+                        {rev.customerName.charAt(0).toUpperCase()}
                       </div>
-
-                      <div className="flex items-center gap-0.5">
-                        {[1, 2, 3, 4, 5].map((st) => (
-                          <Star
-                            key={st}
-                            className={`w-3.5 h-3.5 ${
-                              st <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'
-                            }`}
-                          />
-                        ))}
+                      <div>
+                        <p className="font-bold text-xs text-gray-900">{rev.customerName}</p>
+                        <p className="text-[10px] text-gray-500 tabular-nums">
+                          {new Date(rev.createdAt).toLocaleDateString('id-ID')}
+                          {rev.size ? ` · EU ${rev.size}` : ''}
+                          {rev.fitFeedback ? ` · ${rev.fitFeedback}` : ''}
+                        </p>
                       </div>
                     </div>
 
-                    <p className="text-xs text-gray-700 leading-relaxed font-sans">{rev.comment}</p>
-
-                    {rev.photoUrl && (
-                      <div className="w-16 h-16 rounded-xl overflow-hidden border border-pink-200 bg-white">
-                        <img src={rev.photoUrl} alt="Foto ulasan pembeli" className="w-full h-full object-cover" />
-                      </div>
-                    )}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {[1, 2, 3, 4, 5].map((st) => (
+                        <Star
+                          key={st}
+                          className={`w-3.5 h-3.5 ${
+                            st <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   </div>
-                ))}
+
+                  <p className="text-xs text-gray-700 leading-relaxed font-sans">{rev.comment}</p>
+
+                  {rev.photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setZoomedReviewPhoto(rev.photoUrl || null)}
+                      className="group relative w-16 h-16 rounded-xl overflow-hidden border border-pink-200 bg-white cursor-pointer block"
+                      title="Perbesar foto pembeli"
+                    >
+                      <img
+                        src={rev.photoUrl}
+                        alt={`Foto ulasan ${rev.productName}`}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Eye className="w-4 h-4 text-white" />
+                      </span>
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Review Photo Zoom Lightbox */}
+      {zoomedReviewPhoto && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
+          onClick={(e) => {
+            e.stopPropagation();
+            setZoomedReviewPhoto(null);
+          }}
+        >
+          <div
+            className="relative max-w-lg w-full bg-white rounded-3xl p-3 space-y-2.5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={zoomedReviewPhoto}
+              alt="Foto ulasan pembeli diperbesar"
+              className="w-full max-h-[72vh] object-contain rounded-2xl bg-gray-50"
+            />
+            <button
+              type="button"
+              onClick={() => setZoomedReviewPhoto(null)}
+              className="w-full min-h-[42px] py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs cursor-pointer"
+            >
+              Tutup Foto
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

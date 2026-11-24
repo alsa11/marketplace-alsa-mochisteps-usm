@@ -12,7 +12,12 @@ import {
   subscribeToVouchers,
   subscribeToReviews,
   subscribeToReturns,
+  subscribeToLookbook,
+  seedLookbookIfEmpty,
+  seedReviewsIfEmpty,
   DEFAULT_STORE_SETTINGS,
+  DEFAULT_LOOKBOOK_ITEMS,
+  INITIAL_SEED_REVIEWS,
 } from './lib/firestoreService';
 import {
   Product,
@@ -23,6 +28,7 @@ import {
   Voucher,
   ProductReview,
   OrderReturn,
+  LookbookItem,
 } from './types';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
@@ -36,6 +42,7 @@ import { InsoleGuideModal } from './components/InsoleGuideModal';
 import { WishlistDrawer } from './components/WishlistDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { Footer } from './components/Footer';
+import { LookbookAndTestimonialsSection } from './components/LookbookAndTestimonialsSection';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { Sparkles, ShieldCheck, Footprints, RefreshCw, Heart, ArrowRight, Search, Ruler, X } from 'lucide-react';
@@ -47,8 +54,17 @@ export default function App() {
   const [mutations, setMutations] = useState<StockMutation[]>([]);
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
-  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviews, setReviews] = useState<ProductReview[]>(INITIAL_SEED_REVIEWS);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
+  const [lookbookItems, setLookbookItems] = useState<LookbookItem[]>(() => {
+    const now = new Date().toISOString();
+    return DEFAULT_LOOKBOOK_ITEMS.map((item, idx) => ({
+      ...item,
+      id: `default-lb-${idx + 1}`,
+      createdAt: now,
+      updatedAt: now,
+    }));
+  });
 
   // Cart with localStorage persistence
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -179,8 +195,14 @@ export default function App() {
       setReturns(rets);
     });
 
+    const unsubscribeLookbook = subscribeToLookbook((items) => {
+      setLookbookItems(items);
+    });
+
     // 2. Perform seed check and connectivity test asynchronously without blocking the real-time stream
-    seedProductsIfEmpty().catch((err) => console.warn('Product seeding note:', err));
+    seedProductsIfEmpty()
+      .then(() => Promise.all([seedLookbookIfEmpty(), seedReviewsIfEmpty()]))
+      .catch((err) => console.warn('Product seeding note:', err));
     testFirestoreConnection().then(setIsFirestoreConnected).catch(() => {});
 
     return () => {
@@ -191,6 +213,7 @@ export default function App() {
       if (unsubscribeVouchers) unsubscribeVouchers();
       if (unsubscribeReviews) unsubscribeReviews();
       if (unsubscribeReturns) unsubscribeReturns();
+      if (unsubscribeLookbook) unsubscribeLookbook();
     };
   }, []);
 
@@ -281,6 +304,7 @@ export default function App() {
         vouchers={vouchers}
         reviews={reviews}
         returns={returns}
+        lookbookItems={lookbookItems}
       />
     );
   }
@@ -480,6 +504,16 @@ export default function App() {
           </div>
         )}
       </section>
+
+      {/* Galeri Lookbook Gaya & Testimoni Foto Pembeli */}
+      <LookbookAndTestimonialsSection
+        lookbookItems={lookbookItems}
+        reviews={reviews}
+        products={products}
+        onAddToCart={(p, size, qty) => handleAddToCart(p, size, qty ?? 1)}
+        onOpenProductDetail={(p) => setActiveProductDetail(p)}
+        onOpenInsoleGuide={() => setIsInsoleGuideOpen(true)}
+      />
 
       {/* Floating Cart Button for Quick Desktop Access */}
       {totalCartCount > 0 && (

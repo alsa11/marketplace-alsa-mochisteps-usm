@@ -77,6 +77,48 @@
         "createdAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["email", "role"]
+    },
+    "ProductReview": {
+      "title": "ProductReview",
+      "description": "Verified buyer product review with photo and size fit feedback",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 100 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "orderNumber": { "type": "string", "maxLength": 64 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "maxLength": 1000 },
+        "photoUrl": { "type": "string", "maxLength": 500000 },
+        "size": { "type": "number" },
+        "fitFeedback": { "type": "string", "maxLength": 60 },
+        "featuredInGallery": { "type": "boolean" },
+        "isApproved": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["productId", "productName", "orderId", "orderNumber", "customerName", "rating", "comment"]
+    },
+    "LookbookItem": {
+      "title": "LookbookItem",
+      "description": "Curated editorial lookbook style entry linked to flatshoes product and worn EU size",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 120 },
+        "occasion": { "type": "string", "maxLength": 50 },
+        "imageUrl": { "type": "string", "maxLength": 500000 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 100 },
+        "wornSize": { "type": "number" },
+        "fitNote": { "type": "string", "maxLength": 200 },
+        "stylingTip": { "type": "string", "maxLength": 500 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["title", "occasion", "imageUrl", "productId", "productName", "wornSize", "isActive"]
     }
   },
   "firestore": {
@@ -95,6 +137,14 @@
     "/admins/{adminId}": {
       "schema": "Admin",
       "description": "Authorized administrators"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "ProductReview",
+      "description": "Verified customer product reviews and photo testimonials"
+    },
+    "/lookbook_items/{itemId}": {
+      "schema": "LookbookItem",
+      "description": "Admin-curated lookbook styling cards linked to catalog products"
     }
   }
 }
